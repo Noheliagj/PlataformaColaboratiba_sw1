@@ -30,6 +30,9 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // RF5/RF6: estado del diagrama UML (nodes + edges de React Flow).
+  modelData Json?
+
   // Lado "muchos" de la relación 1:N con User.
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)

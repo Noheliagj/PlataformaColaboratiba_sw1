@@ -43,3 +43,152 @@
   padding: 4px 8px;
   border-radius: 6px;
 }
+
+/* Botones flotantes */
+.editor-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.editor-fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editor-fab.primary {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+
+.editor-fab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editor-error {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  z-index: 10;
+  background: #7f1d1d;
+  color: #fecaca;
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  max-width: 320px;
+}
+
+/* Panel lateral de edición (RF6) */
+.sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 20;
+  width: 300px;
+  height: 100%;
+  background: #1e293b;
+  border-left: 1px solid #334155;
+  color: #e2e8f0;
+  padding: 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.sidebar-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.sidebar-field {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.sidebar-field > span {
+  display: block;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-section {
+  margin-bottom: 18px;
+}
+
+.sidebar-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.sidebar-empty {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-style: italic;
+  margin: 4px 0;
+}
+
+.sidebar-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.sidebar input {
+  flex: 1;
+  min-width: 0;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+
+.sidebar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #334155;
+  border: none;
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sidebar-icon-btn.danger {
+  background: transparent;
+  border: 1px solid #7f1d1d;
+  color: #fca5a5;
+}

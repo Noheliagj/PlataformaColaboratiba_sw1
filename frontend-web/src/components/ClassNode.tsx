@@ -2,12 +2,13 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import './class-node.css';
 
-/** Datos que llevará cada nodo de clase (edición pendiente para RF6). */
-export interface ClassNodeData {
+/** Datos que lleva cada nodo de clase. `type` (no `interface`) para que
+ *  sea compatible con el genérico Node<T> de React Flow. */
+export type ClassNodeData = {
   name?: string;
   attributes?: string[];
   methods?: string[];
-}
+};
 
 /**
  * RF4 - Nodo personalizado con la forma de una clase UML:
