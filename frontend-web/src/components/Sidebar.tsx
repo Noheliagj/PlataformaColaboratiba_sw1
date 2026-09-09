@@ -1,19 +1,105 @@
 import { Plus, Trash2, X } from 'lucide-react';
 import type { ClassNodeData } from './ClassNode';
+import type { ClassEdgeData } from './CustomEdge';
 
 type ListKey = 'attributes' | 'methods';
 
-interface SidebarProps {
-  data: ClassNodeData;
-  onChange: (patch: Partial<ClassNodeData>) => void;
-  onClose: () => void;
-}
+/** Opciones de cardinalidad ofrecidas para las asociaciones. */
+const CARDINALITIES = ['1', '0..1', 'N', '0..*'];
+
+type SidebarProps =
+  | {
+      kind: 'node';
+      data: ClassNodeData;
+      onChange: (patch: Partial<ClassNodeData>) => void;
+      onClose: () => void;
+    }
+  | {
+      kind: 'edge';
+      data: ClassEdgeData;
+      onChange: (patch: Partial<ClassEdgeData>) => void;
+      onClose: () => void;
+    };
 
 /**
- * RF6 - Panel lateral de edición de la clase seleccionada.
- * Cada cambio llama a onChange, que actualiza el nodo en tiempo real.
+ * RF6 - Panel lateral de edición. Muestra el formulario de clase o el de
+ * asociación según lo que esté seleccionado en el lienzo.
  */
-export function Sidebar({ data, onChange, onClose }: SidebarProps) {
+export function Sidebar(props: SidebarProps) {
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-head">
+        <h3>{props.kind === 'edge' ? 'Editar relación' : 'Editar clase'}</h3>
+        <button type="button" className="sidebar-icon-btn" onClick={props.onClose}>
+          <X size={16} />
+        </button>
+      </div>
+
+      {props.kind === 'edge' ? (
+        <EdgeForm data={props.data} onChange={props.onChange} />
+      ) : (
+        <NodeForm data={props.data} onChange={props.onChange} />
+      )}
+    </aside>
+  );
+}
+
+function EdgeForm({
+  data,
+  onChange,
+}: {
+  data: ClassEdgeData;
+  onChange: (patch: Partial<ClassEdgeData>) => void;
+}) {
+  const cardinalitySelect = (
+    value: string | undefined,
+    onPick: (v: string) => void,
+  ) => (
+    <select value={value ?? ''} onChange={(e) => onPick(e.target.value)}>
+      <option value="">(sin especificar)</option>
+      {CARDINALITIES.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  );
+
+  return (
+    <>
+      <label className="sidebar-field">
+        <span>Nombre de la relación</span>
+        <input
+          value={data.relationName ?? ''}
+          onChange={(e) => onChange({ relationName: e.target.value })}
+          placeholder="p. ej. pertenece_a"
+        />
+      </label>
+
+      <label className="sidebar-field">
+        <span>Cardinalidad origen</span>
+        {cardinalitySelect(data.sourceCardinality, (v) =>
+          onChange({ sourceCardinality: v }),
+        )}
+      </label>
+
+      <label className="sidebar-field">
+        <span>Cardinalidad destino</span>
+        {cardinalitySelect(data.targetCardinality, (v) =>
+          onChange({ targetCardinality: v }),
+        )}
+      </label>
+    </>
+  );
+}
+
+function NodeForm({
+  data,
+  onChange,
+}: {
+  data: ClassNodeData;
+  onChange: (patch: Partial<ClassNodeData>) => void;
+}) {
   const attributes = data.attributes ?? [];
   const methods = data.methods ?? [];
 
@@ -36,7 +122,7 @@ export function Sidebar({ data, onChange, onClose }: SidebarProps) {
     );
   };
 
-  const renderList = (key: ListKey, label: string) => (
+  const renderList = (key: ListKey, label: string, items: string[]) => (
     <div className="sidebar-section">
       <div className="sidebar-section-head">
         <span>{label}</span>
@@ -49,15 +135,17 @@ export function Sidebar({ data, onChange, onClose }: SidebarProps) {
           <Plus size={14} />
         </button>
       </div>
-      {(data[key] ?? []).length === 0 && (
+      {items.length === 0 && (
         <p className="sidebar-empty">Sin {label.toLowerCase()}</p>
       )}
-      {(key === 'attributes' ? attributes : methods).map((item, index) => (
+      {items.map((item, index) => (
         <div className="sidebar-row" key={index}>
           <input
             value={item}
             onChange={(e) => updateItem(key, index, e.target.value)}
-            placeholder={key === 'attributes' ? '- campo: tipo' : '+ metodo(): tipo'}
+            placeholder={
+              key === 'attributes' ? '- campo: tipo' : '+ metodo(): tipo'
+            }
           />
           <button
             type="button"
@@ -73,14 +161,7 @@ export function Sidebar({ data, onChange, onClose }: SidebarProps) {
   );
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-head">
-        <h3>Editar clase</h3>
-        <button type="button" className="sidebar-icon-btn" onClick={onClose}>
-          <X size={16} />
-        </button>
-      </div>
-
+    <>
       <label className="sidebar-field">
         <span>Nombre</span>
         <input
@@ -90,8 +171,8 @@ export function Sidebar({ data, onChange, onClose }: SidebarProps) {
         />
       </label>
 
-      {renderList('attributes', 'Atributos')}
-      {renderList('methods', 'Métodos')}
-    </aside>
+      {renderList('attributes', 'Atributos', attributes)}
+      {renderList('methods', 'Métodos', methods)}
+    </>
   );
 }

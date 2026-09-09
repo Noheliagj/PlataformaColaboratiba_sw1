@@ -13,6 +13,7 @@ import '@xyflow/react/dist/style.css';
 import { ArrowLeft, Plus, Save } from 'lucide-react';
 import axios from 'axios';
 import { ClassNode, type ClassNodeData } from '../components/ClassNode';
+import { CustomEdge, type ClassEdgeData } from '../components/CustomEdge';
 import { Sidebar } from '../components/Sidebar';
 import { getProject, saveProjectModel } from '../services/projects';
 import { clearSession } from '../services/auth';
@@ -21,8 +22,14 @@ import './editor.css';
 
 type ClassFlowNode = Node<ClassNodeData>;
 
-// Fuera del componente para no recrear el objeto en cada render.
+// Fuera del componente para no recrear los objetos en cada render.
 const nodeTypes = { classNode: ClassNode };
+const edgeTypes = { customEdge: CustomEdge };
+
+type Selection =
+  | { kind: 'node'; id: string }
+  | { kind: 'edge'; id: string }
+  | null;
 
 function createClassNode(): ClassFlowNode {
   return {
@@ -40,7 +47,7 @@ export function EditorPage() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ClassFlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Selection>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -90,8 +97,20 @@ export function EditorPage() {
     };
   }, [id, setNodes, setEdges, handleAuthError]);
 
+  // Las nuevas asociaciones usan el tipo 'customEdge'.
   const onConnect = useCallback(
-    (conn: Connection) => setEdges((eds) => addEdge(conn, eds)),
+    (conn: Connection) =>
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...conn,
+            id: `edge-${crypto.randomUUID()}`,
+            type: 'customEdge',
+            data: {} as ClassEdgeData,
+          },
+          eds,
+        ),
+      ),
     [setEdges],
   );
 
@@ -99,19 +118,36 @@ export function EditorPage() {
     setNodes((nds) => [...nds, createClassNode()]);
   }, [setNodes]);
 
-  // RF6: los cambios del panel lateral se reflejan al instante en el nodo.
-  const updateSelectedData = useCallback(
+  // RF6: cambios del panel lateral sobre la CLASE seleccionada, en vivo.
+  const updateSelectedNode = useCallback(
     (patch: Partial<ClassNodeData>) => {
-      if (!selectedId) return;
+      if (selection?.kind !== 'node') return;
+      const targetId = selection.id;
       setNodes((nds) =>
         nds.map((node) =>
-          node.id === selectedId
+          node.id === targetId
             ? { ...node, data: { ...node.data, ...patch } }
             : node,
         ),
       );
     },
-    [selectedId, setNodes],
+    [selection, setNodes],
+  );
+
+  // RF6: cambios del panel lateral sobre la ASOCIACIÓN seleccionada, en vivo.
+  const updateSelectedEdge = useCallback(
+    (patch: Partial<ClassEdgeData>) => {
+      if (selection?.kind !== 'edge') return;
+      const targetId = selection.id;
+      setEdges((eds) =>
+        eds.map((edge) =>
+          edge.id === targetId
+            ? { ...edge, data: { ...(edge.data ?? {}), ...patch } }
+            : edge,
+        ),
+      );
+    },
+    [selection, setEdges],
   );
 
   // RF5: guarda el estado actual (solo lo esencial) en el backend.
@@ -126,10 +162,12 @@ export function EditorPage() {
         position,
         data,
       })) as Node[];
-      const cleanEdges = edges.map(({ id: eId, source, target }) => ({
+      const cleanEdges = edges.map(({ id: eId, source, target, type, data }) => ({
         id: eId,
         source,
         target,
+        type,
+        data,
       })) as Edge[];
       await saveProjectModel(id, { nodes: cleanNodes, edges: cleanEdges });
       setSavedAt(new Date().toLocaleTimeString());
@@ -142,7 +180,14 @@ export function EditorPage() {
     }
   }, [id, nodes, edges, handleAuthError]);
 
-  const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
+  const selectedNode =
+    selection?.kind === 'node'
+      ? (nodes.find((node) => node.id === selection.id) ?? null)
+      : null;
+  const selectedEdge =
+    selection?.kind === 'edge'
+      ? (edges.find((edge) => edge.id === selection.id) ?? null)
+      : null;
 
   return (
     <div className="editor-page">
@@ -184,8 +229,10 @@ export function EditorPage() {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
-        onNodeClick={(_, node) => setSelectedId(node.id)}
-        onPaneClick={() => setSelectedId(null)}
+        edgeTypes={edgeTypes}
+        onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
+        onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
+        onPaneClick={() => setSelection(null)}
         fitView
       >
         <Background />
@@ -194,9 +241,19 @@ export function EditorPage() {
 
       {selectedNode && (
         <Sidebar
+          kind="node"
           data={selectedNode.data}
-          onChange={updateSelectedData}
-          onClose={() => setSelectedId(null)}
+          onChange={updateSelectedNode}
+          onClose={() => setSelection(null)}
+        />
+      )}
+
+      {selectedEdge && (
+        <Sidebar
+          kind="edge"
+          data={(selectedEdge.data ?? {}) as ClassEdgeData}
+          onChange={updateSelectedEdge}
+          onClose={() => setSelection(null)}
         />
       )}
     </div>

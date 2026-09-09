@@ -162,9 +162,12 @@
   margin-bottom: 6px;
 }
 
-.sidebar input {
+.sidebar input,
+.sidebar select {
   flex: 1;
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   background: #0f172a;
   border: 1px solid #334155;
   border-radius: 6px;
