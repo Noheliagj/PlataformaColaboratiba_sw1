@@ -6,3 +6,34 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// RF1 (Registro) y RF2 (Login): usuario de la plataforma.
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relación 1:N -> un usuario es owner de muchos proyectos.
+  projects Project[]
+
+  @@map("users")
+}
+
+// RF3 (Crear/listar/eliminar proyectos): proyecto de modelado.
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Lado "muchos" de la relación 1:N con User.
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@map("projects")
+}
