@@ -128,6 +128,25 @@
   margin-top: 6px;
 }
 
+.project-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.link-btn {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+}
+
 .danger-btn {
   background: transparent;
   border: 1px solid #7f1d1d;

@@ -1,0 +1,45 @@
+/* Ocupa todo el viewport, sin scrollbars, por encima del layout de #root. */
+.editor-page {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.editor-page .react-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.editor-topbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editor-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.editor-title {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.7);
+  padding: 4px 8px;
+  border-radius: 6px;
+}

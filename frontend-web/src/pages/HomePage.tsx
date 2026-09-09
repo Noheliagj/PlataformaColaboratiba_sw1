@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { FolderPlus, LogOut, Trash2 } from 'lucide-react';
+import { FolderPlus, LogOut, PencilRuler, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { clearSession, getStoredUser } from '../services/auth';
 import {
@@ -162,15 +162,24 @@ export function HomePage() {
                       {new Date(project.createdAt).toLocaleString()}
                     </div>
                   </div>
-                  <button
-                    className="danger-btn"
-                    type="button"
-                    onClick={() => handleDelete(project.id)}
-                    disabled={deletingId === project.id}
-                  >
-                    <Trash2 size={14} />
-                    {deletingId === project.id ? 'Eliminando…' : 'Eliminar'}
-                  </button>
+                  <div className="project-actions">
+                    <button
+                      className="link-btn"
+                      type="button"
+                      onClick={() => navigate(`/projects/${project.id}/editor`)}
+                    >
+                      <PencilRuler size={14} /> Abrir Editor
+                    </button>
+                    <button
+                      className="danger-btn"
+                      type="button"
+                      onClick={() => handleDelete(project.id)}
+                      disabled={deletingId === project.id}
+                    >
+                      <Trash2 size={14} />
+                      {deletingId === project.id ? 'Eliminando…' : 'Eliminar'}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
