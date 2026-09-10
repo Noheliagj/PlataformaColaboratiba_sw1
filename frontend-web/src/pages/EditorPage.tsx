@@ -80,7 +80,14 @@ export function EditorPage() {
         const model = project.modelData;
         if (model?.nodes?.length) {
           setNodes(model.nodes as ClassFlowNode[]);
-          setEdges((model.edges ?? []) as Edge[]);
+          // Fuerza 'customEdge' en aristas persistidas antes de RF6 (o sin
+          // tipo), para que sus etiquetas se rendericen en el lienzo.
+          setEdges(
+            ((model.edges ?? []) as Edge[]).map((edge) => ({
+              ...edge,
+              type: 'customEdge',
+            })),
+          );
         }
       } catch (err) {
         if (!cancelled && !handleAuthError(err)) {
@@ -230,6 +237,7 @@ export function EditorPage() {
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        defaultEdgeOptions={{ type: 'customEdge' }}
         onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
         onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
         onPaneClick={() => setSelection(null)}
