@@ -1,6 +1,5 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath } from '@xyflow/react';
 import type { EdgeProps } from '@xyflow/react';
-import './custom-edge.css';
 
 /** Datos de una asociación entre clases (se guardan en edge.data). */
 export type ClassEdgeData = {
@@ -8,6 +7,16 @@ export type ClassEdgeData = {
   sourceCardinality?: string;
   targetCardinality?: string;
 };
+
+const LABEL_CLASS =
+  'absolute select-none whitespace-nowrap rounded-md border border-slate-700 ' +
+  'bg-slate-900 px-1.5 py-0.5 text-[11px] font-medium text-slate-200 shadow-sm ' +
+  'pointer-events-auto';
+
+const CARD_CLASS =
+  'absolute select-none whitespace-nowrap rounded-md border border-slate-600 ' +
+  'bg-slate-700 px-1.5 py-0.5 font-mono text-[11px] text-slate-100 shadow-sm ' +
+  'pointer-events-auto';
 
 /**
  * RF6 - Arista con hasta tres etiquetas opcionales:
@@ -59,7 +68,7 @@ export function CustomEdge({
       <EdgeLabelRenderer>
         {relationName && (
           <div
-            className="edge-label"
+            className={LABEL_CLASS}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             }}
@@ -69,7 +78,7 @@ export function CustomEdge({
         )}
         {sourceCardinality && (
           <div
-            className="edge-card"
+            className={CARD_CLASS}
             style={{
               transform: `translate(-50%, -50%) translate(${srcX}px, ${srcY}px)`,
             }}
@@ -79,7 +88,7 @@ export function CustomEdge({
         )}
         {targetCardinality && (
           <div
-            className="edge-card"
+            className={CARD_CLASS}
             style={{
               transform: `translate(-50%, -50%) translate(${tgtX}px, ${tgtY}px)`,
             }}

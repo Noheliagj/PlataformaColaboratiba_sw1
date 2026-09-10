@@ -10,11 +10,19 @@ import {
 } from '@xyflow/react';
 import type { Connection, Edge, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowLeft, Download, Plus, Save } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Download,
+  Loader2,
+  Plus,
+  Save,
+} from 'lucide-react';
 import axios from 'axios';
 import { ClassNode, type ClassNodeData } from '../components/ClassNode';
 import { CustomEdge, type ClassEdgeData } from '../components/CustomEdge';
 import { Sidebar } from '../components/Sidebar';
+import { Button } from '../components/ui/Button';
 import {
   downloadSpringBootProject,
   getProject,
@@ -22,7 +30,6 @@ import {
 } from '../services/projects';
 import { clearSession } from '../services/auth';
 import { getErrorMessage } from '../services/http-error';
-import './editor.css';
 
 type ClassFlowNode = Node<ClassNodeData>;
 
@@ -222,82 +229,123 @@ export function EditorPage() {
       : null;
 
   return (
-    <div className="editor-page">
-      <div className="editor-topbar">
-        <button
-          className="editor-back-btn"
-          type="button"
-          onClick={() => navigate('/')}
-        >
-          <ArrowLeft size={14} /> Volver
-        </button>
-        <span className="editor-title">
-          Editor · proyecto {id}
-          {loading && ' · cargando…'}
-          {!loading && !saving && savedAt && ` · guardado ${savedAt}`}
-        </span>
-      </div>
+    <div className="fixed inset-0 flex flex-col bg-slate-950">
+      {/* Barra superior del editor */}
+      <header className="z-20 flex items-center justify-between gap-4 border-b border-slate-800 bg-slate-900/90 px-4 py-2.5 backdrop-blur">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700/70"
+          >
+            <ArrowLeft size={14} /> Dashboard
+          </button>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold text-white">
+              {projectName || 'Editor UML'}
+            </h1>
+            <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              {loading ? (
+                <>
+                  <Loader2 size={11} className="animate-spin" /> Cargando…
+                </>
+              ) : saving ? (
+                <>
+                  <Loader2 size={11} className="animate-spin" /> Guardando…
+                </>
+              ) : savedAt ? (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Guardado {savedAt}
+                </>
+              ) : (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-600" />
+                  Sin cambios guardados
+                </>
+              )}
+            </p>
+          </div>
+        </div>
 
-      <div className="editor-toolbar">
-        <button type="button" className="editor-fab" onClick={addClass}>
-          <Plus size={15} /> Agregar Clase
-        </button>
-        <button
-          type="button"
-          className="editor-fab primary"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          <Save size={15} /> {saving ? 'Guardando…' : 'Guardar Diagrama'}
-        </button>
-        <button
-          type="button"
-          className="editor-fab"
-          onClick={handleExportSpring}
-          disabled={exporting}
-        >
-          <Download size={15} />{' '}
-          {exporting ? 'Generando…' : 'Exportar Spring Boot'}
-        </button>
-      </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={addClass}
+            icon={<Plus size={15} />}
+          >
+            <span className="hidden sm:inline">Agregar clase</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleExportSpring}
+            loading={exporting}
+            icon={!exporting && <Download size={15} />}
+          >
+            <span className="hidden md:inline">
+              {exporting ? 'Generando…' : 'Exportar Spring Boot'}
+            </span>
+            <span className="md:hidden">Spring</span>
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            loading={saving}
+            icon={!saving && <Save size={15} />}
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </div>
+      </header>
 
-      {error && <div className="editor-error">{error}</div>}
-
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        defaultEdgeOptions={{ type: 'customEdge' }}
-        onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
-        onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
-        onPaneClick={() => setSelection(null)}
-        fitView
-      >
-        <Background />
-        <Controls />
-      </ReactFlow>
-
-      {selectedNode && (
-        <Sidebar
-          kind="node"
-          data={selectedNode.data}
-          onChange={updateSelectedNode}
-          onClose={() => setSelection(null)}
-        />
+      {error && (
+        <div className="absolute top-16 left-1/2 z-30 flex -translate-x-1/2 items-start gap-2 rounded-lg border border-rose-900/60 bg-rose-950/90 px-3 py-2.5 text-sm text-rose-200 shadow-xl">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <span className="max-w-xs">{error}</span>
+        </div>
       )}
 
-      {selectedEdge && (
-        <Sidebar
-          kind="edge"
-          data={(selectedEdge.data ?? {}) as ClassEdgeData}
-          onChange={updateSelectedEdge}
-          onClose={() => setSelection(null)}
-        />
-      )}
+      {/* Lienzo */}
+      <div className="relative flex-1">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          defaultEdgeOptions={{ type: 'customEdge' }}
+          onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
+          onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
+          onPaneClick={() => setSelection(null)}
+          colorMode="dark"
+          fitView
+        >
+          <Background color="#1e293b" gap={20} />
+          <Controls />
+        </ReactFlow>
+
+        {selectedNode && (
+          <Sidebar
+            kind="node"
+            data={selectedNode.data}
+            onChange={updateSelectedNode}
+            onClose={() => setSelection(null)}
+          />
+        )}
+
+        {selectedEdge && (
+          <Sidebar
+            kind="edge"
+            data={(selectedEdge.data ?? {}) as ClassEdgeData}
+            onChange={updateSelectedEdge}
+            onClose={() => setSelection(null)}
+          />
+        )}
+      </div>
     </div>
   );
 }
