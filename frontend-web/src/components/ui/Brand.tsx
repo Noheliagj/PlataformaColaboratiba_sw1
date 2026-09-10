@@ -1,26 +1,62 @@
-import { Boxes } from 'lucide-react';
-
-/** Marca de la plataforma: isotipo + nombre. */
-export function Brand({ size = 'md' }: { size?: 'md' | 'lg' }) {
+/** Marca de la plataforma: isotipo geométrico + wordmark. */
+export function Brand({
+  size = 'md',
+  showTagline = true,
+}: {
+  size?: 'md' | 'lg';
+  showTagline?: boolean;
+}) {
   const lg = size === 'lg';
   return (
     <div className="flex items-center gap-2.5">
       <span
-        className={`grid place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-950/40 ${
-          lg ? 'h-11 w-11' : 'h-9 w-9'
+        className={`relative grid shrink-0 place-items-center rounded-[10px] border border-hairline-strong bg-raised text-accent-hi ${
+          lg ? 'h-10 w-10' : 'h-8 w-8'
         }`}
       >
-        <Boxes size={lg ? 24 : 20} />
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          className={lg ? 'h-5 w-5' : 'h-4 w-4'}
+          aria-hidden="true"
+        >
+          <rect
+            x="3"
+            y="3"
+            width="8"
+            height="8"
+            rx="1.5"
+            stroke="currentColor"
+            strokeWidth="1.6"
+          />
+          <rect
+            x="13"
+            y="13"
+            width="8"
+            height="8"
+            rx="1.5"
+            stroke="currentColor"
+            strokeWidth="1.6"
+          />
+          <path
+            d="M11 7h4a2 2 0 0 1 2 2v4"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+        </svg>
       </span>
       <span className="leading-tight">
         <span
-          className={`block font-semibold text-white ${lg ? 'text-lg' : 'text-sm'}`}
+          className={`block font-semibold text-ink ${lg ? 'text-[15px]' : 'text-[13px]'}`}
         >
-          UML Studio
+          UML&nbsp;Studio
         </span>
-        <span className="block text-[11px] text-slate-400">
-          Plataforma de modelado
-        </span>
+        {showTagline && (
+          <span className="block text-[11px] text-ink-muted">
+            Modelado colaborativo
+          </span>
+        )}
       </span>
     </div>
   );

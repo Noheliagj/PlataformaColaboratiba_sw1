@@ -8,7 +8,7 @@ interface NavbarProps {
   onLogout: () => void;
 }
 
-/** Barra superior del dashboard: marca, perfil de usuario y cierre de sesión. */
+/** Barra superior del dashboard: marca, identidad del usuario y salida. */
 export function Navbar({ user, onLogout }: NavbarProps) {
   const initials = user.name
     .split(' ')
@@ -19,22 +19,21 @@ export function Navbar({ user, onLogout }: NavbarProps) {
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-hairline bg-canvas/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3">
-        <Brand />
+        <Brand showTagline={false} />
 
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-3 rounded-full border border-slate-800 bg-slate-900/70 py-1.5 pr-4 pl-1.5 sm:flex">
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white">
+          <div className="hidden items-center gap-2.5 rounded-lg border border-hairline bg-surface py-1.5 pr-3.5 pl-1.5 sm:flex">
+            <span className="grid h-7 w-7 place-items-center rounded-md border border-hairline-strong bg-raised text-[11px] font-semibold text-accent-hi">
               {initials || 'U'}
             </span>
             <span className="leading-tight">
-              <span className="block text-xs font-medium text-slate-100">
+              <span className="block text-[12px] font-medium text-ink">
                 {user.name}
               </span>
-              <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Sesión activa
+              <span className="block text-[11px] text-ink-muted">
+                {user.email}
               </span>
             </span>
           </div>
@@ -45,7 +44,7 @@ export function Navbar({ user, onLogout }: NavbarProps) {
             onClick={onLogout}
             icon={<LogOut size={14} />}
           >
-            Cerrar sesión
+            <span className="hidden sm:inline">Cerrar sesión</span>
           </Button>
         </div>
       </div>

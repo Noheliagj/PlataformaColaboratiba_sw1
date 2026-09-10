@@ -7,7 +7,7 @@ interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string | null;
 }
 
-/** Campo de formulario con etiqueta, icono opcional y estado de error visual. */
+/** Campo de formulario con etiqueta encima, icono opcional y estado de error. */
 export function TextField({
   label,
   icon,
@@ -21,28 +21,28 @@ export function TextField({
     <div className="space-y-1.5">
       <label
         htmlFor={id}
-        className="block text-xs font-medium text-slate-300"
+        className="block text-[12px] font-medium text-ink-soft"
       >
         {label}
       </label>
       <div
-        className={`flex items-center gap-2.5 rounded-lg border bg-slate-950/60 px-3 py-2.5 transition-colors focus-within:ring-2 ${
+        className={`flex items-center gap-2.5 rounded-lg border bg-sunken px-3 py-2.5 transition-colors focus-within:ring-2 ${
           error
-            ? 'border-rose-700/70 focus-within:border-rose-600 focus-within:ring-rose-600/20'
-            : 'border-slate-700 focus-within:border-indigo-500 focus-within:ring-indigo-500/25'
+            ? 'border-critical/55 focus-within:border-critical focus-within:ring-critical-soft'
+            : 'border-hairline-strong focus-within:border-accent focus-within:ring-accent-soft'
         }`}
       >
-        {icon && <span className="shrink-0 text-slate-500">{icon}</span>}
+        {icon && <span className="shrink-0 text-ink-faint">{icon}</span>}
         <input
           id={id}
-          className={`w-full min-w-0 bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-600 ${className}`}
+          className={`w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint ${className}`}
           {...rest}
         />
       </div>
       {error ? (
-        <p className="text-xs text-rose-400">{error}</p>
+        <p className="text-[12px] text-critical">{error}</p>
       ) : hint ? (
-        <p className="text-xs text-slate-500">{hint}</p>
+        <p className="text-[12px] text-ink-muted">{hint}</p>
       ) : null}
     </div>
   );

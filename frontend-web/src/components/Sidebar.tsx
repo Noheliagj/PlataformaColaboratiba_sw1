@@ -8,11 +8,11 @@ type ListKey = 'attributes' | 'methods';
 const CARDINALITIES = ['1', '0..1', 'N', '0..*'];
 
 const INPUT_CLASS =
-  'w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 ' +
-  'outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25';
+  'w-full min-w-0 rounded-lg border border-hairline-strong bg-sunken px-3 py-2 font-mono text-[13px] text-ink ' +
+  'outline-none transition-colors placeholder:text-ink-faint focus:border-accent focus:ring-2 focus:ring-accent-soft';
 
 const FIELD_LABEL =
-  'block text-[11px] font-semibold uppercase tracking-wide text-slate-400';
+  'block text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-faint';
 
 type SidebarProps =
   | {
@@ -29,27 +29,30 @@ type SidebarProps =
     };
 
 /**
- * RF6 - Panel lateral de edición. Muestra el formulario de clase o el de
+ * RF6 - Panel de inspección. Muestra el formulario de clase o el de
  * asociación según lo que esté seleccionado en el lienzo.
  */
 export function Sidebar(props: SidebarProps) {
   return (
-    <aside className="absolute top-0 right-0 z-20 flex h-full w-80 flex-col overflow-y-auto border-l border-slate-800 bg-slate-900/95 backdrop-blur">
-      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-        <h3 className="text-sm font-semibold text-white">
-          {props.kind === 'edge' ? 'Editar relación' : 'Editar clase'}
-        </h3>
+    <aside className="absolute top-0 right-0 z-20 flex h-full w-[300px] flex-col overflow-y-auto border-l border-hairline bg-surface/95 backdrop-blur-md">
+      <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <h3 className="text-[13px] font-semibold text-ink">
+            {props.kind === 'edge' ? 'Inspector · Relación' : 'Inspector · Clase'}
+          </h3>
+        </div>
         <button
           type="button"
           onClick={props.onClose}
-          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+          className="-mr-1 rounded-md p-1 text-ink-muted transition-colors hover:bg-raised hover:text-ink"
           aria-label="Cerrar panel"
         >
           <X size={16} />
         </button>
       </div>
 
-      <div className="space-y-5 p-4">
+      <div className="space-y-6 p-4">
         {props.kind === 'edge' ? (
           <EdgeForm data={props.data} onChange={props.onChange} />
         ) : (
@@ -60,6 +63,36 @@ export function Sidebar(props: SidebarProps) {
   );
 }
 
+function CardinalityPicker({
+  value,
+  onPick,
+}: {
+  value: string | undefined;
+  onPick: (v: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-1 rounded-lg border border-hairline-strong bg-sunken p-1">
+      {CARDINALITIES.map((c) => {
+        const active = value === c;
+        return (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onPick(active ? '' : c)}
+            className={`rounded-md py-1.5 font-mono text-[12px] transition-colors ${
+              active
+                ? 'bg-accent text-white'
+                : 'text-ink-muted hover:bg-raised hover:text-ink'
+            }`}
+          >
+            {c}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function EdgeForm({
   data,
   onChange,
@@ -67,24 +100,6 @@ function EdgeForm({
   data: ClassEdgeData;
   onChange: (patch: Partial<ClassEdgeData>) => void;
 }) {
-  const cardinalitySelect = (
-    value: string | undefined,
-    onPick: (v: string) => void,
-  ) => (
-    <select
-      className={INPUT_CLASS}
-      value={value ?? ''}
-      onChange={(e) => onPick(e.target.value)}
-    >
-      <option value="">(sin especificar)</option>
-      {CARDINALITIES.map((c) => (
-        <option key={c} value={c}>
-          {c}
-        </option>
-      ))}
-    </select>
-  );
-
   return (
     <>
       <label className="block space-y-1.5">
@@ -93,23 +108,25 @@ function EdgeForm({
           className={INPUT_CLASS}
           value={data.relationName ?? ''}
           onChange={(e) => onChange({ relationName: e.target.value })}
-          placeholder="p. ej. pertenece_a"
+          placeholder="pertenece_a"
         />
       </label>
 
-      <label className="block space-y-1.5">
+      <div className="space-y-1.5">
         <span className={FIELD_LABEL}>Cardinalidad origen</span>
-        {cardinalitySelect(data.sourceCardinality, (v) =>
-          onChange({ sourceCardinality: v }),
-        )}
-      </label>
+        <CardinalityPicker
+          value={data.sourceCardinality}
+          onPick={(v) => onChange({ sourceCardinality: v })}
+        />
+      </div>
 
-      <label className="block space-y-1.5">
+      <div className="space-y-1.5">
         <span className={FIELD_LABEL}>Cardinalidad destino</span>
-        {cardinalitySelect(data.targetCardinality, (v) =>
-          onChange({ targetCardinality: v }),
-        )}
-      </label>
+        <CardinalityPicker
+          value={data.targetCardinality}
+          onPick={(v) => onChange({ targetCardinality: v })}
+        />
+      </div>
     </>
   );
 }
@@ -151,13 +168,13 @@ function NodeForm({
           type="button"
           onClick={() => addItem(key)}
           title={`Añadir ${label.toLowerCase()}`}
-          className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700"
+          className="inline-flex items-center gap-1 rounded-md border border-hairline-strong bg-raised px-2 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
         >
-          <Plus size={13} /> Añadir
+          <Plus size={12} /> Añadir
         </button>
       </div>
       {items.length === 0 && (
-        <p className="text-xs text-slate-600 italic">
+        <p className="text-[12px] text-ink-faint italic">
           Sin {label.toLowerCase()}
         </p>
       )}
@@ -169,14 +186,14 @@ function NodeForm({
               value={item}
               onChange={(e) => updateItem(key, index, e.target.value)}
               placeholder={
-                key === 'attributes' ? '- campo: tipo' : '+ metodo(): tipo'
+                key === 'attributes' ? 'campo: tipo' : 'metodo(): tipo'
               }
             />
             <button
               type="button"
               onClick={() => removeItem(key, index)}
               title="Eliminar"
-              className="shrink-0 rounded-lg border border-rose-900/70 px-2 text-rose-300 transition-colors hover:bg-rose-950/40"
+              className="shrink-0 rounded-lg border border-critical/40 px-2 text-critical transition-colors hover:bg-critical-soft"
             >
               <Trash2 size={14} />
             </button>
@@ -189,7 +206,7 @@ function NodeForm({
   return (
     <>
       <label className="block space-y-1.5">
-        <span className={FIELD_LABEL}>Nombre</span>
+        <span className={FIELD_LABEL}>Nombre de la clase</span>
         <input
           className={INPUT_CLASS}
           value={data.name ?? ''}
@@ -197,6 +214,8 @@ function NodeForm({
           placeholder="NombreClase"
         />
       </label>
+
+      <div className="h-px bg-hairline" />
 
       {renderList('attributes', 'Atributos', attributes)}
       {renderList('methods', 'Métodos', methods)}

@@ -12,25 +12,29 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BASE =
-  'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors ' +
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 ' +
-  'focus-visible:ring-offset-slate-950 disabled:opacity-60 disabled:cursor-not-allowed select-none';
+  'inline-flex items-center justify-center gap-2 rounded-lg font-medium leading-none ' +
+  'whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-150 ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/55 focus-visible:ring-offset-2 ' +
+  'focus-visible:ring-offset-canvas disabled:opacity-55 disabled:pointer-events-none select-none ' +
+  'active:translate-y-px';
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-indigo-600 text-white hover:bg-indigo-500 active:bg-indigo-700 shadow-sm shadow-indigo-950/50',
+  primary:
+    'bg-accent text-white shadow-sm hover:bg-accent-hi ' +
+    'shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]',
   secondary:
-    'bg-slate-800/70 text-slate-200 border border-slate-700 hover:bg-slate-700/70 hover:border-slate-600',
-  ghost: 'text-slate-300 hover:bg-slate-800/70 hover:text-white',
+    'bg-raised text-ink-soft border border-hairline-strong hover:bg-overlay hover:text-ink',
+  ghost: 'text-ink-muted hover:bg-raised hover:text-ink',
   danger:
-    'bg-transparent text-rose-300 border border-rose-900/70 hover:bg-rose-950/40 hover:border-rose-800',
+    'bg-transparent text-critical border border-critical/40 hover:bg-critical-soft hover:border-critical/60',
 };
 
 const SIZES: Record<Size, string> = {
-  sm: 'text-xs px-3 py-1.5',
+  sm: 'text-[13px] px-3 py-1.5',
   md: 'text-sm px-4 py-2.5',
 };
 
-/** Botón reutilizable con variantes de color, tamaños y estado de carga. */
+/** Botón reutilizable con variantes, tamaños y estado de carga. */
 export function Button({
   variant = 'primary',
   size = 'md',

@@ -9,13 +9,13 @@ export type ClassEdgeData = {
 };
 
 const LABEL_CLASS =
-  'absolute select-none whitespace-nowrap rounded-md border border-slate-700 ' +
-  'bg-slate-900 px-1.5 py-0.5 text-[11px] font-medium text-slate-200 shadow-sm ' +
+  'absolute select-none whitespace-nowrap rounded-md border border-hairline-strong ' +
+  'bg-surface px-1.5 py-0.5 text-[10px] font-medium text-ink shadow-[0_4px_12px_-4px_rgba(0,0,0,0.6)] ' +
   'pointer-events-auto';
 
 const CARD_CLASS =
-  'absolute select-none whitespace-nowrap rounded-md border border-slate-600 ' +
-  'bg-slate-700 px-1.5 py-0.5 font-mono text-[11px] text-slate-100 shadow-sm ' +
+  'absolute select-none whitespace-nowrap rounded border border-hairline-strong ' +
+  'bg-raised px-1 py-px font-mono text-[10px] text-ink-soft ' +
   'pointer-events-auto';
 
 /**
@@ -61,7 +61,7 @@ export function CustomEdge({
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          stroke: selected ? '#818cf8' : '#94a3b8',
+          stroke: selected ? '#7c86e6' : '#6b6d78',
           strokeWidth: selected ? 2 : 1.5,
         }}
       />

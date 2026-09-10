@@ -1,12 +1,49 @@
 @import 'tailwindcss';
 
 /*
- * Estética global de la plataforma.
- * Paleta: grises oscuros (slate) + acento índigo/violeta.
+ * ─────────────────────────────────────────────────────────────
+ *  Sistema de diseño · UML Studio
+ *  Estética comercial (Linear / Vercel / Stripe): superficie
+ *  casi negra, bordes hairline, un único acento, tipografía
+ *  ajustada y movimiento contenido.
+ * ─────────────────────────────────────────────────────────────
  */
 @theme {
   --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  /* Superficies (de fondo a elevado) */
+  --color-canvas: #08090a;
+  --color-sunken: #0b0c0d;
+  --color-surface: #101113;
+  --color-raised: #16171a;
+  --color-overlay: #1c1d21;
+
+  /* Líneas y separadores */
+  --color-hairline: rgba(255, 255, 255, 0.07);
+  --color-hairline-strong: rgba(255, 255, 255, 0.13);
+
+  /* Texto */
+  --color-ink: #ededef;
+  --color-ink-soft: #b7b8be;
+  --color-ink-muted: #83848d;
+  --color-ink-faint: #55565e;
+
+  /* Acento único */
+  --color-accent: #5e6ad2;
+  --color-accent-hi: #7c86e6;
+  --color-accent-lo: #4c57b8;
+  --color-accent-soft: rgba(94, 106, 210, 0.14);
+
+  /* Semánticos */
+  --color-positive: #3dd68c;
+  --color-critical: #e5484d;
+  --color-critical-soft: rgba(229, 72, 77, 0.13);
+
+  /* Sombras: sutiles, nunca difusas de colores */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
 }
 
 html,
@@ -17,53 +54,138 @@ body,
 
 body {
   margin: 0;
-  background-color: #020617; /* slate-950 */
-  color: #cbd5e1; /* slate-300 */
+  background-color: var(--color-canvas);
+  color: var(--color-ink-soft);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-/* Scrollbar sutil y coherente con el tema oscuro. */
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.021em;
+  color: var(--color-ink);
+}
+
+/* Textura de fondo global: rejilla fina + halo tenue, sin blobs. */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: center;
+}
+
+.bg-halo {
+  background:
+    radial-gradient(
+      60rem 40rem at 50% -10%,
+      rgba(94, 106, 210, 0.1),
+      transparent 60%
+    );
+}
+
+/* Scrollbar coherente con el tema. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(255, 255, 255, 0.13);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(255, 255, 255, 0.22);
   background-clip: content-box;
 }
 
-/* --- Ajustes visuales de React Flow para integrarlo con el tema --- */
+/* Selección de texto con el acento. */
+::selection {
+  background: rgba(94, 106, 210, 0.32);
+  color: #fff;
+}
+
+/* Foco visible consistente. */
+:focus-visible {
+  outline: none;
+}
+
+/* ── React Flow: integración con el tema del editor ───────────── */
+.react-flow {
+  --xy-background-color: var(--color-canvas);
+}
+.react-flow__background {
+  background-color: var(--color-canvas);
+}
 .react-flow__controls {
-  border-radius: 0.5rem;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.5);
-  border: 1px solid #1e293b;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-hairline-strong);
 }
 .react-flow__controls-button {
-  background: #0f172a;
-  border-bottom: 1px solid #1e293b;
-  color: #cbd5e1;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-hairline);
+  color: var(--color-ink-soft);
+  width: 30px;
+  height: 30px;
 }
 .react-flow__controls-button:hover {
-  background: #1e293b;
+  background: var(--color-raised);
+  color: var(--color-ink);
 }
 .react-flow__controls-button svg {
   fill: currentColor;
 }
 .react-flow__attribution {
   background: transparent;
-  color: #475569;
+  color: var(--color-ink-faint);
+  font-size: 10px;
+}
+.react-flow__handle {
+  transition:
+    transform 0.12s ease,
+    background-color 0.12s ease;
+}
+.react-flow__handle:hover {
+  transform: scale(1.25);
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke: var(--color-accent-hi);
+}
+
+/* ── Animaciones utilitarias (movimiento contenido) ──────────── */
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-rise {
+  animation: fade-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-rise {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

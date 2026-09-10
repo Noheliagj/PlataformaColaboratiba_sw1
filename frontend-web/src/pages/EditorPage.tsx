@@ -228,67 +228,73 @@ export function EditorPage() {
       ? (edges.find((edge) => edge.id === selection.id) ?? null)
       : null;
 
+  const statusMeta = loading
+    ? { dot: 'bg-ink-faint', label: 'Cargando…', spin: true }
+    : saving
+      ? { dot: 'bg-ink-faint', label: 'Guardando…', spin: true }
+      : savedAt
+        ? { dot: 'bg-positive', label: `Guardado ${savedAt}`, spin: false }
+        : { dot: 'bg-ink-faint', label: 'Sin cambios guardados', spin: false };
+
   return (
-    <div className="fixed inset-0 flex flex-col bg-slate-950">
+    <div className="fixed inset-0 flex flex-col bg-canvas">
       {/* Barra superior del editor */}
-      <header className="z-20 flex items-center justify-between gap-4 border-b border-slate-800 bg-slate-900/90 px-4 py-2.5 backdrop-blur">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="z-20 flex items-center justify-between gap-4 border-b border-hairline bg-surface/90 px-3 py-2 backdrop-blur-md">
+        <div className="flex min-w-0 items-center gap-2.5">
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700/70"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline-strong bg-raised px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
           >
-            <ArrowLeft size={14} /> Dashboard
+            <ArrowLeft size={14} /> Proyectos
           </button>
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-white">
+
+          <span className="h-5 w-px bg-hairline-strong" />
+
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h1 className="truncate text-[13px] font-semibold text-ink">
               {projectName || 'Editor UML'}
             </h1>
-            <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
-              {loading ? (
-                <>
-                  <Loader2 size={11} className="animate-spin" /> Cargando…
-                </>
-              ) : saving ? (
-                <>
-                  <Loader2 size={11} className="animate-spin" /> Guardando…
-                </>
-              ) : savedAt ? (
-                <>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Guardado {savedAt}
-                </>
+            <span className="hidden items-center gap-1.5 rounded-full border border-hairline bg-raised px-2 py-0.5 text-[11px] text-ink-muted sm:inline-flex">
+              {statusMeta.spin ? (
+                <Loader2 size={11} className="animate-spin" />
               ) : (
-                <>
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-600" />
-                  Sin cambios guardados
-                </>
+                <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
               )}
-            </p>
+              {statusMeta.label}
+            </span>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={addClass}
-            icon={<Plus size={15} />}
-          >
-            <span className="hidden sm:inline">Agregar clase</span>
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleExportSpring}
-            loading={exporting}
-            icon={!exporting && <Download size={15} />}
-          >
-            <span className="hidden md:inline">
-              {exporting ? 'Generando…' : 'Exportar Spring Boot'}
-            </span>
-            <span className="md:hidden">Spring</span>
-          </Button>
+          <div className="flex items-center rounded-lg border border-hairline-strong bg-raised p-0.5">
+            <button
+              type="button"
+              onClick={addClass}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
+            >
+              <Plus size={15} />
+              <span className="hidden sm:inline">Agregar clase</span>
+            </button>
+            <span className="mx-0.5 h-4 w-px bg-hairline-strong" />
+            <button
+              type="button"
+              onClick={handleExportSpring}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink disabled:opacity-55"
+            >
+              {exporting ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <Download size={15} />
+              )}
+              <span className="hidden md:inline">
+                {exporting ? 'Generando…' : 'Exportar Spring Boot'}
+              </span>
+              <span className="md:hidden">Spring</span>
+            </button>
+          </div>
+
           <Button
             size="sm"
             onClick={handleSave}
@@ -301,7 +307,7 @@ export function EditorPage() {
       </header>
 
       {error && (
-        <div className="absolute top-16 left-1/2 z-30 flex -translate-x-1/2 items-start gap-2 rounded-lg border border-rose-900/60 bg-rose-950/90 px-3 py-2.5 text-sm text-rose-200 shadow-xl">
+        <div className="animate-fade-rise absolute top-14 left-1/2 z-30 flex -translate-x-1/2 items-start gap-2 rounded-lg border border-critical/45 bg-critical-soft px-3 py-2.5 text-[13px] text-critical shadow-lg backdrop-blur-md">
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
           <span className="max-w-xs">{error}</span>
         </div>
@@ -324,7 +330,7 @@ export function EditorPage() {
           colorMode="dark"
           fitView
         >
-          <Background color="#1e293b" gap={20} />
+          <Background color="#1b1c20" gap={22} size={1} />
           <Controls />
         </ReactFlow>
 
