@@ -54,3 +54,36 @@ export async function saveProjectModel(
 export async function deleteProject(id: string): Promise<void> {
   await api.delete(`/projects/${id}`);
 }
+
+/**
+ * RF7: GET /projects/:id/generate/spring — descarga el backend Spring Boot
+ * generado a partir del diagrama (nodes + edges) como un .zip binario.
+ */
+export async function downloadSpringBootProject(
+  id: string,
+  projectName: string,
+): Promise<void> {
+  const { data } = await api.get<ArrayBuffer>(`/projects/${id}/generate/spring`, {
+    responseType: 'arraybuffer',
+  });
+  const blob = new Blob([data], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${slugify(projectName)}-spring.zip`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Debe coincidir con el slug que usa el backend para nombrar el .zip. */
+function slugify(name: string): string {
+  const slug = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'proyecto';
+}

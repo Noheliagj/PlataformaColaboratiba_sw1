@@ -10,12 +10,16 @@ import {
 } from '@xyflow/react';
 import type { Connection, Edge, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowLeft, Plus, Save } from 'lucide-react';
+import { ArrowLeft, Download, Plus, Save } from 'lucide-react';
 import axios from 'axios';
 import { ClassNode, type ClassNodeData } from '../components/ClassNode';
 import { CustomEdge, type ClassEdgeData } from '../components/CustomEdge';
 import { Sidebar } from '../components/Sidebar';
-import { getProject, saveProjectModel } from '../services/projects';
+import {
+  downloadSpringBootProject,
+  getProject,
+  saveProjectModel,
+} from '../services/projects';
 import { clearSession } from '../services/auth';
 import { getErrorMessage } from '../services/http-error';
 import './editor.css';
@@ -49,9 +53,11 @@ export function EditorPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selection, setSelection] = useState<Selection>(null);
 
+  const [projectName, setProjectName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleAuthError = useCallback(
@@ -77,6 +83,7 @@ export function EditorPage() {
       try {
         const project = await getProject(id);
         if (cancelled) return;
+        setProjectName(project.name);
         const model = project.modelData;
         if (model?.nodes?.length) {
           setNodes(model.nodes as ClassFlowNode[]);
@@ -187,6 +194,24 @@ export function EditorPage() {
     }
   }, [id, nodes, edges, handleAuthError]);
 
+  // RF7: descarga el backend Spring Boot generado a partir del diagrama.
+  const handleExportSpring = useCallback(async () => {
+    if (!id) return;
+    setExporting(true);
+    setError(null);
+    try {
+      await downloadSpringBootProject(id, projectName || 'proyecto');
+    } catch (err) {
+      if (!handleAuthError(err)) {
+        setError(
+          getErrorMessage(err, 'No se pudo generar el backend Spring Boot'),
+        );
+      }
+    } finally {
+      setExporting(false);
+    }
+  }, [id, projectName, handleAuthError]);
+
   const selectedNode =
     selection?.kind === 'node'
       ? (nodes.find((node) => node.id === selection.id) ?? null)
@@ -224,6 +249,15 @@ export function EditorPage() {
           disabled={saving}
         >
           <Save size={15} /> {saving ? 'Guardando…' : 'Guardar Diagrama'}
+        </button>
+        <button
+          type="button"
+          className="editor-fab"
+          onClick={handleExportSpring}
+          disabled={exporting}
+        >
+          <Download size={15} />{' '}
+          {exporting ? 'Generando…' : 'Exportar Spring Boot'}
         </button>
       </div>
 
