@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { GeneratorModule } from './generator/generator.module';
 import { WebsocketsModule } from './websockets/websockets.module';
+import { IaModule } from './ia/ia.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WebsocketsModule } from './websockets/websockets.module';
     ProjectsModule,
     GeneratorModule,
     WebsocketsModule,
+    IaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

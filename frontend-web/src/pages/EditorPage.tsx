@@ -11,20 +11,14 @@ import {
 import type { Connection, Edge, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Socket } from 'socket.io-client';
-import {
-  AlertCircle,
-  ArrowLeft,
-  Download,
-  Loader2,
-  Plus,
-  Save,
-  Users,
-} from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { ClassNode, type ClassNodeData } from '../components/ClassNode';
 import { CustomEdge, type ClassEdgeData } from '../components/CustomEdge';
 import { Sidebar } from '../components/Sidebar';
-import { Button } from '../components/ui/Button';
+import { EditorHeader } from '../components/EditorHeader';
+import { HistoryPanel } from '../components/HistoryPanel';
+import { ChatIA } from '../components/ChatIA';
 import {
   downloadSpringBootProject,
   getProject,
@@ -33,7 +27,12 @@ import {
 } from '../services/projects';
 import { clearSession } from '../services/auth';
 import { getErrorMessage } from '../services/http-error';
-import { connectDiagramSocket, type DiagramUpdatePayload } from '../services/socket';
+import {
+  connectDiagramSocket,
+  type DiagramUpdatePayload,
+  type PresenceUpdatePayload,
+  type PresenceUser,
+} from '../services/socket';
 
 type ClassFlowNode = Node<ClassNodeData>;
 
@@ -81,6 +80,13 @@ export function EditorPage() {
   // evita emitir un "cambio" espurio en el primer render.
   const loadedRef = useRef(false);
   const [remoteEditor, setRemoteEditor] = useState<string | null>(null);
+  const [presence, setPresence] = useState<PresenceUser[]>([]);
+
+  // RF9: historial de guardados del diagrama.
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // RF11: asistente de IA.
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const handleAuthError = useCallback(
     (err: unknown): boolean => {
@@ -162,6 +168,11 @@ export function EditorPage() {
       setError('No se pudo unir a la colaboración en tiempo real de este proyecto.');
     });
 
+    // RF10: quién tiene el proyecto abierto ahora mismo.
+    socket.on('presence-update', (payload: PresenceUpdatePayload) => {
+      setPresence(payload.users);
+    });
+
     socket.on('diagram-update', (payload: DiagramUpdatePayload) => {
       applyingRemoteRef.current = true;
       setNodes(payload.nodes as ClassFlowNode[]);
@@ -177,6 +188,7 @@ export function EditorPage() {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      setPresence([]);
     };
   }, [id, setNodes, setEdges]);
 
@@ -324,86 +336,37 @@ export function EditorPage() {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-canvas">
-      {/* Barra superior del editor */}
-      <header className="z-20 flex items-center justify-between gap-4 border-b border-hairline bg-surface/90 px-3 py-2 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline-strong bg-raised px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
-          >
-            <ArrowLeft size={14} /> Proyectos
-          </button>
+      <EditorHeader
+        projectName={projectName}
+        role={role}
+        statusMeta={statusMeta}
+        remoteEditor={remoteEditor}
+        presence={presence}
+        exporting={exporting}
+        saving={saving}
+        onBack={() => navigate('/')}
+        onAddClass={addClass}
+        onExportSpring={handleExportSpring}
+        onSave={handleSave}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onToggleAssistant={() => setAssistantOpen((prev) => !prev)}
+      />
 
-          <span className="h-5 w-px bg-hairline-strong" />
+      {id && (
+        <HistoryPanel
+          open={historyOpen}
+          projectId={id}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
 
-          <div className="flex min-w-0 items-center gap-2.5">
-            <h1 className="truncate text-[13px] font-semibold text-ink">
-              {projectName || 'Editor UML'}
-            </h1>
-            <span className="hidden items-center gap-1.5 rounded-full border border-hairline bg-raised px-2 py-0.5 text-[11px] text-ink-muted sm:inline-flex">
-              {statusMeta.spin ? (
-                <Loader2 size={11} className="animate-spin" />
-              ) : (
-                <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
-              )}
-              {statusMeta.label}
-            </span>
-            {role === 'COLLABORATOR' && (
-              <span className="hidden items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent-hi sm:inline-flex">
-                <Users size={11} />
-                Colaborador
-              </span>
-            )}
-          </div>
-        </div>
-
-        {remoteEditor && (
-          <span className="animate-fade-rise hidden items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent-hi md:inline-flex">
-            <Users size={12} />
-            {remoteEditor} está editando…
-          </span>
-        )}
-
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex items-center rounded-lg border border-hairline-strong bg-raised p-0.5">
-            <button
-              type="button"
-              onClick={addClass}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink"
-            >
-              <Plus size={15} />
-              <span className="hidden sm:inline">Agregar clase</span>
-            </button>
-            <span className="mx-0.5 h-4 w-px bg-hairline-strong" />
-            <button
-              type="button"
-              onClick={handleExportSpring}
-              disabled={exporting}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink disabled:opacity-55"
-            >
-              {exporting ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <Download size={15} />
-              )}
-              <span className="hidden md:inline">
-                {exporting ? 'Generando…' : 'Exportar Spring Boot'}
-              </span>
-              <span className="md:hidden">Spring</span>
-            </button>
-          </div>
-
-          <Button
-            size="sm"
-            onClick={handleSave}
-            loading={saving}
-            icon={!saving && <Save size={15} />}
-          >
-            {saving ? 'Guardando…' : 'Guardar'}
-          </Button>
-        </div>
-      </header>
+      {id && (
+        <ChatIA
+          open={assistantOpen}
+          projectId={id}
+          onClose={() => setAssistantOpen(false)}
+        />
+      )}
 
       {error && (
         <div className="animate-fade-rise absolute top-14 left-1/2 z-30 flex -translate-x-1/2 items-start gap-2 rounded-lg border border-critical/45 bg-critical-soft px-3 py-2.5 text-[13px] text-critical shadow-lg backdrop-blur-md">

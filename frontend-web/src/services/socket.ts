@@ -10,6 +10,16 @@ export interface DiagramUpdatePayload {
   fromUserName: string;
 }
 
+/** RF10: usuario conectado ahora mismo a la sala del proyecto. */
+export interface PresenceUser {
+  userId: string;
+  userName: string;
+}
+
+export interface PresenceUpdatePayload {
+  users: PresenceUser[];
+}
+
 /**
  * Abre la conexión al namespace `/diagram` del backend (equivalente al
  * tópico `/topic/diagram/{projectId}`, ver DiagramGateway) autenticada con

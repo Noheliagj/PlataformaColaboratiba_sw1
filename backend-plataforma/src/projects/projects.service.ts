@@ -50,6 +50,14 @@ export type ProjectWithRole = Project & {
   modelData: DiagramModel;
 };
 
+/** RF9: una entrada del historial de guardados (GET /projects/:id/history). */
+export interface ProjectActivityEntry {
+  id: string;
+  action: string;
+  createdAt: Date;
+  user: { id: string; name: string };
+}
+
 /** Filas normalizadas para el generador Spring Boot (RF7/RF14): sin pasar
  * por el formateo a string que usa el editor (ver getDiagramForGenerator). */
 export interface DiagramForGenerator {
@@ -178,15 +186,11 @@ export class ProjectsService {
     const { role } = await this.getAccessibleOrThrow(userId, id);
     const project = await this.prisma.project.findUniqueOrThrow({
       where: { id },
-      include: { diagram: { include: DIAGRAM_INCLUDE } },
     });
-    const { diagram, ...rest } = project;
     return this.redactInvite({
-      ...rest,
+      ...project,
       role,
-      modelData: diagram
-        ? this.toDiagramModel(diagram)
-        : { nodes: [], edges: [] },
+      modelData: await this.getModelData(id),
     });
   }
 
@@ -269,6 +273,11 @@ export class ProjectsService {
         where: { id },
         data: { updatedAt: new Date() },
       });
+
+      // RF9: historial — queda registro de quién guardó y cuándo.
+      await tx.projectActivity.create({
+        data: { projectId: id, userId, action: 'SAVE_DIAGRAM' },
+      });
     });
 
     return this.findOneAccessible(userId, id);
@@ -324,6 +333,27 @@ export class ProjectsService {
     return { id: project.id, name: project.name, role: 'COLLABORATOR' };
   }
 
+  /** RF9: historial de guardados del diagrama (dueño o colaborador pueden verlo). */
+  async getHistory(
+    userId: string,
+    id: string,
+    limit = 50,
+  ): Promise<ProjectActivityEntry[]> {
+    await this.getAccessibleOrThrow(userId, id);
+    const activities = await this.prisma.projectActivity.findMany({
+      where: { projectId: id },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: { user: { select: { id: true, name: true } } },
+    });
+    return activities.map((activity) => ({
+      id: activity.id,
+      action: activity.action,
+      createdAt: activity.createdAt,
+      user: activity.user,
+    }));
+  }
+
   /**
    * RF7/RF14: filas normalizadas listas para el generador Spring Boot, sin
    * pasar por el formateo a string que usa el editor (evita un viaje
@@ -364,6 +394,181 @@ export class ProjectsService {
         targetCardinality: rel.targetCardinality,
       })),
     };
+  }
+
+  /**
+   * RF11: mutaciones puntuales sobre el diagrama para el asistente de IA
+   * (ver src/ia). A diferencia de updateModel (reemplazo total del
+   * diagrama), cada una toca solo lo que pide el comando en lenguaje
+   * natural sin afectar el resto — así el asistente puede "crear la clase
+   * Cliente" sin arriesgar el resto del diagrama. Todas devuelven el
+   * modelData actualizado para que el asistente lo retransmita por
+   * WebSocket (RF10) a los demás colaboradores conectados.
+   */
+  async aiCreateClass(
+    userId: string,
+    id: string,
+    input: {
+      name: string;
+      attributes?: Array<{ name: string; type?: string }>;
+      methods?: Array<{
+        name: string;
+        returnType?: string;
+        parameters?: string;
+      }>;
+    },
+  ): Promise<{ modelData: DiagramModel; className: string }> {
+    const diagram = await this.getOwnDiagramOrThrow(userId, id);
+    const classRow = await this.prisma.classNode.create({
+      data: {
+        diagramId: diagram.id,
+        name: input.name.trim() || 'Clase',
+        // Posición aproximada y aleatoria: el usuario la puede arrastrar
+        // luego en el lienzo; evita que todas las clases de la IA queden
+        // amontonadas en el mismo punto.
+        positionX: 80 + Math.random() * 420,
+        positionY: 80 + Math.random() * 320,
+        attributes: {
+          create: (input.attributes ?? []).map((attr, index) => ({
+            name: attr.name.trim() || `campo${index + 1}`,
+            type: attr.type?.trim() || 'String',
+            orderIndex: index,
+          })),
+        },
+        methods: {
+          create: (input.methods ?? []).map((method, index) => ({
+            name: method.name.trim() || `metodo${index + 1}`,
+            returnType: method.returnType?.trim() || 'void',
+            parameters: method.parameters?.trim() || '',
+            orderIndex: index,
+          })),
+        },
+      },
+    });
+    return { modelData: await this.getModelData(id), className: classRow.name };
+  }
+
+  async aiAddAttribute(
+    userId: string,
+    id: string,
+    input: { className: string; name: string; type?: string },
+  ): Promise<{ modelData: DiagramModel }> {
+    const diagram = await this.getOwnDiagramOrThrow(userId, id);
+    const classRow = await this.findClassByName(diagram.id, input.className);
+    const orderIndex = await this.prisma.attribute.count({
+      where: { classId: classRow.id },
+    });
+    await this.prisma.attribute.create({
+      data: {
+        classId: classRow.id,
+        name: input.name.trim() || 'campo',
+        type: input.type?.trim() || 'String',
+        orderIndex,
+      },
+    });
+    return { modelData: await this.getModelData(id) };
+  }
+
+  async aiAddMethod(
+    userId: string,
+    id: string,
+    input: {
+      className: string;
+      name: string;
+      returnType?: string;
+      parameters?: string;
+    },
+  ): Promise<{ modelData: DiagramModel }> {
+    const diagram = await this.getOwnDiagramOrThrow(userId, id);
+    const classRow = await this.findClassByName(diagram.id, input.className);
+    const orderIndex = await this.prisma.method.count({
+      where: { classId: classRow.id },
+    });
+    await this.prisma.method.create({
+      data: {
+        classId: classRow.id,
+        name: input.name.trim() || 'metodo',
+        returnType: input.returnType?.trim() || 'void',
+        parameters: input.parameters?.trim() || '',
+        orderIndex,
+      },
+    });
+    return { modelData: await this.getModelData(id) };
+  }
+
+  async aiCreateRelationship(
+    userId: string,
+    id: string,
+    input: {
+      sourceClassName: string;
+      targetClassName: string;
+      name?: string;
+      sourceCardinality?: string;
+      targetCardinality?: string;
+    },
+  ): Promise<{ modelData: DiagramModel }> {
+    const diagram = await this.getOwnDiagramOrThrow(userId, id);
+    const source = await this.findClassByName(
+      diagram.id,
+      input.sourceClassName,
+    );
+    const target = await this.findClassByName(
+      diagram.id,
+      input.targetClassName,
+    );
+    await this.prisma.relationship.create({
+      data: {
+        diagramId: diagram.id,
+        sourceClassId: source.id,
+        targetClassId: target.id,
+        name: input.name?.trim() || null,
+        sourceCardinality: input.sourceCardinality?.trim() || null,
+        targetCardinality: input.targetCardinality?.trim() || null,
+      },
+    });
+    return { modelData: await this.getModelData(id) };
+  }
+
+  async aiDeleteClass(
+    userId: string,
+    id: string,
+    input: { className: string },
+  ): Promise<{ modelData: DiagramModel }> {
+    const diagram = await this.getOwnDiagramOrThrow(userId, id);
+    const classRow = await this.findClassByName(diagram.id, input.className);
+    // Cascada: se borran también sus atributos/métodos y las relaciones
+    // donde esta clase era origen o destino.
+    await this.prisma.classNode.delete({ where: { id: classRow.id } });
+    return { modelData: await this.getModelData(id) };
+  }
+
+  /** Diagrama del proyecto (dueño o colaborador), ya listo para React Flow. */
+  private async getModelData(projectId: string): Promise<DiagramModel> {
+    const diagram = await this.prisma.diagram.findUnique({
+      where: { projectId },
+      include: DIAGRAM_INCLUDE,
+    });
+    return diagram ? this.toDiagramModel(diagram) : { nodes: [], edges: [] };
+  }
+
+  /** Valida acceso y devuelve el Diagram del proyecto (siempre existe, ver create()). */
+  private async getOwnDiagramOrThrow(userId: string, projectId: string) {
+    await this.getAccessibleOrThrow(userId, projectId);
+    return this.prisma.diagram.findUniqueOrThrow({ where: { projectId } });
+  }
+
+  /** Busca una clase del diagrama por nombre (sin distinguir mayúsculas). */
+  private async findClassByName(diagramId: string, name: string) {
+    const trimmed = name.trim();
+    const classRow = await this.prisma.classNode.findFirst({
+      where: { diagramId, name: { equals: trimmed, mode: 'insensitive' } },
+    });
+    if (!classRow) {
+      throw new NotFoundException(
+        `No existe una clase llamada "${trimmed}" en este diagrama`,
+      );
+    }
+    return classRow;
   }
 
   /** Busca el proyecto y comprueba que pertenece al usuario (dueño). */

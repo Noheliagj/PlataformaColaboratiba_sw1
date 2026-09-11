@@ -52,6 +52,12 @@ export class ProjectsController {
     return this.projects.getInviteInfo(user.id, id);
   }
 
+  // GET /projects/:id/history -> RF9: quién guardó el diagrama y cuándo
+  @Get(':id/history')
+  getHistory(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.getHistory(user.id, id);
+  }
+
   // PUT /projects/:id/model -> guarda el diagrama (dueño o colaborador)
   @Put(':id/model')
   updateModel(

@@ -12,7 +12,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { UsersService } from '../users/users.service';
-import { ProjectsService } from '../projects/projects.service';
+import { DiagramModel, ProjectsService } from '../projects/projects.service';
 
 interface JoinProjectPayload {
   projectId: string;
@@ -22,6 +22,12 @@ interface DiagramChangePayload {
   projectId: string;
   nodes: unknown[];
   edges: unknown[];
+}
+
+/** RF10: quién está conectado ahora mismo a la sala de un proyecto. */
+interface PresenceUser {
+  userId: string;
+  userName: string;
 }
 
 /**
@@ -36,6 +42,10 @@ interface DiagramChangePayload {
  * El gateway NO persiste el diagrama: solo reenvía el cambio en vivo. El
  * guardado real sigue pasando por `PUT /projects/:id/model` (RF5/RF9), tal
  * como ya lo hace el botón "Guardar" del editor.
+ *
+ * También lleva la presencia (quién está conectado a cada proyecto ahora
+ * mismo) en un mapa en memoria — un solo proceso Node, sin Redis ni
+ * adaptador externo (no hace falta para el alcance de este proyecto).
  */
 @WebSocketGateway({
   namespace: '/diagram',
@@ -49,6 +59,13 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
   server!: Server;
 
   private readonly logger = new Logger(DiagramGateway.name);
+
+  // projectId -> (socketId -> usuario). Un mismo usuario puede aparecer más
+  // de una vez si tiene el proyecto abierto en dos pestañas/dispositivos.
+  private readonly presenceByProject = new Map<
+    string,
+    Map<string, PresenceUser>
+  >();
 
   constructor(
     private readonly jwt: JwtService,
@@ -85,9 +102,16 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
     });
   }
 
+  /** RF10: al desconectar, sale de la presencia del proyecto que tenía abierto. */
   handleDisconnect(socket: Socket): void {
-    // Socket.IO abandona todas las rooms automáticamente al desconectar.
-    this.logger.debug(`Cliente desconectado: ${socket.id}`);
+    const projectId = socket.data.projectId as string | undefined;
+    if (!projectId) return;
+
+    const room = this.presenceByProject.get(projectId);
+    room?.delete(socket.id);
+    if (room && room.size === 0) this.presenceByProject.delete(projectId);
+
+    this.broadcastPresence(projectId);
   }
 
   /** El cliente entra a la room del proyecto tras validar acceso (RF4/RF10). */
@@ -97,7 +121,8 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
     @MessageBody() body: JoinProjectPayload,
   ): Promise<void> {
     const userId = socket.data.userId as string | undefined;
-    if (!userId || !body?.projectId) return;
+    const userName = socket.data.userName as string | undefined;
+    if (!userId || !userName || !body?.projectId) return;
 
     try {
       await this.projects.getAccessibleOrThrow(userId, body.projectId);
@@ -108,8 +133,18 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
       return;
     }
 
+    socket.data.projectId = body.projectId;
     await socket.join(this.room(body.projectId));
+
+    if (!this.presenceByProject.has(body.projectId)) {
+      this.presenceByProject.set(body.projectId, new Map());
+    }
+    this.presenceByProject
+      .get(body.projectId)!
+      .set(socket.id, { userId, userName });
+
     socket.emit('joined-project', { projectId: body.projectId });
+    this.broadcastPresence(body.projectId);
   }
 
   /**
@@ -128,6 +163,38 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
       edges: body.edges,
       fromUserId: socket.data.userId,
       fromUserName: socket.data.userName,
+    });
+  }
+
+  /**
+   * RF11: el asistente de IA (src/ia) llama esto tras aplicar un cambio, para
+   * que se vea en vivo en el lienzo de todos los que tienen el proyecto
+   * abierto — incluido quien le escribió al asistente, ya que el cambio no
+   * vino de ningún socket suyo (a diferencia de `diagram-change`, acá se usa
+   * `server.to` y no `socket.to`: no hay emisor al que excluir).
+   */
+  broadcastDiagramUpdate(
+    projectId: string,
+    model: DiagramModel,
+    from: { userId: string; userName: string },
+  ): void {
+    this.server.to(this.room(projectId)).emit('diagram-update', {
+      nodes: model.nodes,
+      edges: model.edges,
+      fromUserId: from.userId,
+      fromUserName: from.userName,
+    });
+  }
+
+  /** RF10: emite a toda la sala quién está conectado ahora mismo (sin duplicar por usuario). */
+  private broadcastPresence(projectId: string): void {
+    const room = this.presenceByProject.get(projectId);
+    const byUserId = new Map<string, PresenceUser>();
+    for (const user of room?.values() ?? []) {
+      byUserId.set(user.userId, user);
+    }
+    this.server.to(this.room(projectId)).emit('presence-update', {
+      users: [...byUserId.values()],
     });
   }
 

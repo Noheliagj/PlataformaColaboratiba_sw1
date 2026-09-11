@@ -43,6 +43,14 @@ export interface JoinProjectResult {
   role: ProjectRole;
 }
 
+/** RF9: una entrada del historial de guardados del diagrama. */
+export interface ProjectActivity {
+  id: string;
+  action: string;
+  createdAt: string;
+  user: { id: string; name: string };
+}
+
 /** RF3: GET /projects — solo los del usuario autenticado. */
 export async function listProjects(): Promise<Project[]> {
   const { data } = await api.get<Project[]>('/projects');
@@ -87,6 +95,12 @@ export async function joinProject(
   payload: JoinProjectPayload,
 ): Promise<JoinProjectResult> {
   const { data } = await api.post<JoinProjectResult>('/projects/join', payload);
+  return data;
+}
+
+/** RF9: GET /projects/:id/history — quién guardó el diagrama y cuándo. */
+export async function getProjectHistory(id: string): Promise<ProjectActivity[]> {
+  const { data } = await api.get<ProjectActivity[]>(`/projects/${id}/history`);
   return data;
 }
 

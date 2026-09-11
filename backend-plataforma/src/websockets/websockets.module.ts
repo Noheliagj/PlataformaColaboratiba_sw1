@@ -8,5 +8,8 @@ import { DiagramGateway } from './diagram.gateway';
 @Module({
   imports: [AuthModule, UsersModule, ProjectsModule],
   providers: [DiagramGateway],
+  // Se exporta para que IaModule (RF11) pueda retransmitir por WebSocket
+  // los cambios que aplique el asistente de IA.
+  exports: [DiagramGateway],
 })
 export class WebsocketsModule {}
