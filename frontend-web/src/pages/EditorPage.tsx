@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   addEdge,
@@ -10,6 +10,7 @@ import {
 } from '@xyflow/react';
 import type { Connection, Edge, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import type { Socket } from 'socket.io-client';
 import {
   AlertCircle,
   ArrowLeft,
@@ -17,6 +18,7 @@ import {
   Loader2,
   Plus,
   Save,
+  Users,
 } from 'lucide-react';
 import axios from 'axios';
 import { ClassNode, type ClassNodeData } from '../components/ClassNode';
@@ -27,9 +29,11 @@ import {
   downloadSpringBootProject,
   getProject,
   saveProjectModel,
+  type ProjectRole,
 } from '../services/projects';
 import { clearSession } from '../services/auth';
 import { getErrorMessage } from '../services/http-error';
+import { connectDiagramSocket, type DiagramUpdatePayload } from '../services/socket';
 
 type ClassFlowNode = Node<ClassNodeData>;
 
@@ -61,11 +65,22 @@ export function EditorPage() {
   const [selection, setSelection] = useState<Selection>(null);
 
   const [projectName, setProjectName] = useState('');
+  const [role, setRole] = useState<ProjectRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // RF10: colaboración en tiempo real vía WebSocket.
+  const socketRef = useRef<Socket | null>(null);
+  // true justo después de aplicar un cambio remoto: evita reenviarlo como
+  // si fuera un cambio local (y así entrar en un eco infinito).
+  const applyingRemoteRef = useRef(false);
+  // true una vez que el diagrama inicial ya se cargó desde el backend:
+  // evita emitir un "cambio" espurio en el primer render.
+  const loadedRef = useRef(false);
+  const [remoteEditor, setRemoteEditor] = useState<string | null>(null);
 
   const handleAuthError = useCallback(
     (err: unknown): boolean => {
@@ -91,6 +106,7 @@ export function EditorPage() {
         const project = await getProject(id);
         if (cancelled) return;
         setProjectName(project.name);
+        setRole(project.role ?? 'OWNER');
         const model = project.modelData;
         if (model?.nodes?.length) {
           setNodes(model.nodes as ClassFlowNode[]);
@@ -108,7 +124,12 @@ export function EditorPage() {
           setError(getErrorMessage(err, 'No se pudo cargar el proyecto'));
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          // A partir de aquí, cualquier cambio en nodes/edges es del usuario
+          // (o remoto) y debe considerarse para el broadcast por WebSocket.
+          loadedRef.current = true;
+        }
       }
     };
 
@@ -117,6 +138,64 @@ export function EditorPage() {
       cancelled = true;
     };
   }, [id, setNodes, setEdges, handleAuthError]);
+
+  // RF10: conecta al canal /diagram del proyecto y aplica en vivo los
+  // cambios que emitan otros colaboradores.
+  useEffect(() => {
+    if (!id) return;
+    loadedRef.current = false; // se reactiva cuando `load()` termine arriba
+
+    const socket = connectDiagramSocket();
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('join-project', { projectId: id });
+    });
+
+    socket.on('connect_error', () => {
+      setError(
+        'No se pudo conectar la colaboración en tiempo real. Los cambios se siguen guardando, pero no verás las ediciones de otros en vivo.',
+      );
+    });
+
+    socket.on('project-error', () => {
+      setError('No se pudo unir a la colaboración en tiempo real de este proyecto.');
+    });
+
+    socket.on('diagram-update', (payload: DiagramUpdatePayload) => {
+      applyingRemoteRef.current = true;
+      setNodes(payload.nodes as ClassFlowNode[]);
+      setEdges(
+        (payload.edges as Edge[]).map((edge) => ({
+          ...edge,
+          type: 'customEdge',
+        })),
+      );
+      setRemoteEditor(payload.fromUserName);
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [id, setNodes, setEdges]);
+
+  // RF10: retransmite los cambios locales (nodos/aristas/atributos/métodos)
+  // al resto de colaboradores conectados a este proyecto, con un pequeño
+  // "debounce" para no saturar el socket durante un arrastre.
+  useEffect(() => {
+    if (applyingRemoteRef.current) {
+      // Este cambio vino del propio broadcast remoto: no reenviarlo.
+      applyingRemoteRef.current = false;
+      return;
+    }
+    if (!loadedRef.current || !id) return;
+
+    const timer = setTimeout(() => {
+      socketRef.current?.emit('diagram-change', { projectId: id, nodes, edges });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [nodes, edges, id]);
 
   // Las nuevas asociaciones usan el tipo 'customEdge'.
   const onConnect = useCallback(
@@ -219,6 +298,13 @@ export function EditorPage() {
     }
   }, [id, projectName, handleAuthError]);
 
+  // Oculta el aviso "X está editando…" a los pocos segundos.
+  useEffect(() => {
+    if (!remoteEditor) return;
+    const timer = setTimeout(() => setRemoteEditor(null), 2500);
+    return () => clearTimeout(timer);
+  }, [remoteEditor]);
+
   const selectedNode =
     selection?.kind === 'node'
       ? (nodes.find((node) => node.id === selection.id) ?? null)
@@ -263,8 +349,21 @@ export function EditorPage() {
               )}
               {statusMeta.label}
             </span>
+            {role === 'COLLABORATOR' && (
+              <span className="hidden items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent-hi sm:inline-flex">
+                <Users size={11} />
+                Colaborador
+              </span>
+            )}
           </div>
         </div>
+
+        {remoteEditor && (
+          <span className="animate-fade-rise hidden items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent-hi md:inline-flex">
+            <Users size={12} />
+            {remoteEditor} está editando…
+          </span>
+        )}
 
         <div className="flex shrink-0 items-center gap-2">
           <div className="flex items-center rounded-lg border border-hairline-strong bg-raised p-0.5">

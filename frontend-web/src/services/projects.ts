@@ -7,6 +7,9 @@ export interface DiagramModel {
   edges: Edge[];
 }
 
+/** RF4/RF10: rol del usuario actual dentro del proyecto. */
+export type ProjectRole = 'OWNER' | 'COLLABORATOR';
+
 export interface Project {
   id: string;
   name: string;
@@ -15,11 +18,29 @@ export interface Project {
   updatedAt: string;
   ownerId: string;
   modelData?: DiagramModel | null;
+  /** Presente en las respuestas de GET /projects y GET /projects/:id. */
+  role?: ProjectRole;
 }
 
 export interface CreateProjectPayload {
   name: string;
   description?: string;
+}
+
+export interface InviteInfo {
+  inviteCode: string;
+  invitePassword: string;
+}
+
+export interface JoinProjectPayload {
+  code: string;
+  password: string;
+}
+
+export interface JoinProjectResult {
+  id: string;
+  name: string;
+  role: ProjectRole;
 }
 
 /** RF3: GET /projects — solo los del usuario autenticado. */
@@ -53,6 +74,20 @@ export async function saveProjectModel(
 /** RF3: DELETE /projects/:id */
 export async function deleteProject(id: string): Promise<void> {
   await api.delete(`/projects/${id}`);
+}
+
+/** RF4: GET /projects/:id/invite — código + contraseña (solo el dueño). */
+export async function getInviteInfo(id: string): Promise<InviteInfo> {
+  const { data } = await api.get<InviteInfo>(`/projects/${id}/invite`);
+  return data;
+}
+
+/** RF4/RF10: POST /projects/join — unirse a un proyecto ajeno como colaborador. */
+export async function joinProject(
+  payload: JoinProjectPayload,
+): Promise<JoinProjectResult> {
+  const { data } = await api.post<JoinProjectResult>('/projects/join', payload);
+  return data;
 }
 
 /**

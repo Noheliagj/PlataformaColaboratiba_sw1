@@ -80,12 +80,12 @@ const JAVA_TYPE_MAP: Record<string, string> = {
 export class GeneratorService {
   constructor(private readonly projects: ProjectsService) {}
 
-  /** Carga el proyecto (validando propiedad) y genera el .zip del backend. */
+  /** Carga el proyecto (dueño o colaborador) y genera el .zip del backend. */
   async generateSpringProject(
-    ownerId: string,
+    userId: string,
     id: string,
   ): Promise<{ fileName: string; buffer: Buffer }> {
-    const project = await this.projects.findOneByOwner(ownerId, id);
+    const project = await this.projects.findOneAccessible(userId, id);
     const model = (project.modelData ?? {}) as DiagramModel;
     const buffer = await this.buildZipBuffer(project.name, model);
     return { fileName: `${slugify(project.name)}-spring.zip`, buffer };
@@ -447,7 +447,9 @@ ${accessorsBlock}
 }
 
 function renderField(field: JavaField): string {
-  const annotations = field.annotationLines.map((line) => `    ${line}`).join('\n');
+  const annotations = field.annotationLines
+    .map((line) => `    ${line}`)
+    .join('\n');
   return `${annotations}\n    private ${field.type} ${field.name};`;
 }
 

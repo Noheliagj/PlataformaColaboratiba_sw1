@@ -19,6 +19,9 @@ model User {
   // Relación 1:N -> un usuario es owner de muchos proyectos.
   projects Project[]
 
+  // RF4/RF10: proyectos ajenos a los que este usuario fue invitado.
+  memberships ProjectMember[]
+
   @@map("users")
 }
 
@@ -33,10 +36,34 @@ model Project {
   // RF5/RF6: estado del diagrama UML (nodes + edges de React Flow).
   modelData Json?
 
+  // RF4: credenciales de invitación para unirse como colaborador.
+  // Se generan una sola vez al crear el proyecto (ver ProjectsService.create).
+  inviteCode     String @unique
+  invitePassword String
+
   // Lado "muchos" de la relación 1:N con User.
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
+  // RF4/RF10: colaboradores que se unieron con (inviteCode, invitePassword).
+  members ProjectMember[]
+
   @@index([ownerId])
   @@map("projects")
+}
+
+// RF4/RF10: relación N:M entre un proyecto y sus colaboradores (no dueños).
+model ProjectMember {
+  id       String   @id @default(uuid())
+  joinedAt DateTime @default(now())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
 }

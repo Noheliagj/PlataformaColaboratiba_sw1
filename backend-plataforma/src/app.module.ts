@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { GeneratorModule } from './generator/generator.module';
+import { WebsocketsModule } from './websockets/websockets.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { GeneratorModule } from './generator/generator.module';
     AuthModule,
     ProjectsModule,
     GeneratorModule,
+    WebsocketsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

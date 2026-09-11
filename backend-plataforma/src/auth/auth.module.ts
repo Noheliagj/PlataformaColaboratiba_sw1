@@ -25,6 +25,8 @@ import { JwtStrategy } from './jwt.strategy';
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
   // PassportModule se re-exporta para que otros módulos puedan usar JwtAuthGuard.
-  exports: [PassportModule],
+  // JwtModule se re-exporta para que el gateway de WebSockets (RF10) pueda
+  // verificar el token del handshake con el mismo JwtService.
+  exports: [PassportModule, JwtModule],
 })
 export class AuthModule {}

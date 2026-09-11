@@ -14,6 +14,7 @@ import type { AuthUser } from '../auth/jwt-payload.interface';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectModelDto } from './dto/update-project-model.dto';
+import { JoinProjectDto } from './dto/join-project.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('projects')
@@ -26,19 +27,32 @@ export class ProjectsController {
     return this.projects.create(user.id, dto);
   }
 
-  // GET /projects -> solo los del usuario autenticado
+  // POST /projects/join -> RF4/RF10: unirse con (código, contraseña).
+  // Declarado antes de ':id' para que 'join' no se interprete como un id.
+  @Post('join')
+  join(@CurrentUser() user: AuthUser, @Body() dto: JoinProjectDto) {
+    return this.projects.join(user.id, dto);
+  }
+
+  // GET /projects -> propios (RF3) + aquellos donde el usuario colabora (RF10)
   @Get()
   findAll(@CurrentUser() user: AuthUser) {
-    return this.projects.findAllByOwner(user.id);
+    return this.projects.findAllForUser(user.id);
   }
 
-  // GET /projects/:id -> proyecto individual con su modelData
+  // GET /projects/:id -> proyecto individual con su modelData (dueño o colaborador)
   @Get(':id')
   findOne(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.projects.findOneByOwner(user.id, id);
+    return this.projects.findOneAccessible(user.id, id);
   }
 
-  // PUT /projects/:id/model -> guarda el diagrama (nodes + edges)
+  // GET /projects/:id/invite -> RF4: código + contraseña de invitación (solo dueño)
+  @Get(':id/invite')
+  getInvite(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.getInviteInfo(user.id, id);
+  }
+
+  // PUT /projects/:id/model -> guarda el diagrama (dueño o colaborador)
   @Put(':id/model')
   updateModel(
     @CurrentUser() user: AuthUser,
