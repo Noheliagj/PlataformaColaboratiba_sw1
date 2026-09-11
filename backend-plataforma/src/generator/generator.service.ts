@@ -1,45 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import JSZip from 'jszip';
-import { ProjectsService } from '../projects/projects.service';
+import {
+  DiagramForGenerator,
+  ProjectsService,
+} from '../projects/projects.service';
 
 /**
- * RF7 - Motor universal de generación de código Spring Boot.
+ * RF7/RF14 - Motor universal de generación de código Spring Boot.
  *
- * Traduce el modelData de React Flow (nodes = clases, edges = asociaciones
- * con cardinalidad) a un proyecto Maven de Spring Boot 3 / Java 21 mínimo
- * pero ejecutable: pom.xml, application.properties, clase principal y una
- * entidad JPA por clase del diagrama, con las anotaciones de relación
- * (@OneToMany/@ManyToOne/@ManyToOne/@ManyToMany) derivadas de las
- * cardinalidades de cada asociación.
+ * Traduce las tablas normalizadas del diagrama (classes/attributes +
+ * relationships, ver ProjectsService.getDiagramForGenerator) a un proyecto
+ * Maven de Spring Boot 3 / Java 21 mínimo pero ejecutable: pom.xml,
+ * application.properties, clase principal y una entidad JPA por clase del
+ * diagrama, con las anotaciones de relación (@OneToMany/@ManyToOne/
+ * @OneToOne/@ManyToMany) derivadas de las cardinalidades de cada asociación.
  */
 
 const BASE_PACKAGE = 'com.generado.app';
 const BASE_PACKAGE_PATH = 'src/main/java/com/generado/app';
 
-interface DiagramNode {
-  id: string;
-  data?: {
-    name?: string;
-    attributes?: string[];
-    methods?: string[];
-  };
-}
-
-interface DiagramEdge {
-  id: string;
-  source: string;
-  target: string;
-  data?: {
-    relationName?: string;
-    sourceCardinality?: string;
-    targetCardinality?: string;
-  };
-}
-
-interface DiagramModel {
-  nodes?: DiagramNode[];
-  edges?: DiagramEdge[];
-}
+type DiagramClass = DiagramForGenerator['classes'][number];
+type DiagramRelationship = DiagramForGenerator['relationships'][number];
 
 interface JavaField {
   name: string;
@@ -85,27 +66,23 @@ export class GeneratorService {
     userId: string,
     id: string,
   ): Promise<{ fileName: string; buffer: Buffer }> {
-    const project = await this.projects.findOneAccessible(userId, id);
-    const model = (project.modelData ?? {}) as DiagramModel;
-    const buffer = await this.buildZipBuffer(project.name, model);
-    return { fileName: `${slugify(project.name)}-spring.zip`, buffer };
+    const diagram = await this.projects.getDiagramForGenerator(userId, id);
+    const buffer = await this.buildZipBuffer(diagram);
+    return { fileName: `${slugify(diagram.projectName)}-spring.zip`, buffer };
   }
 
-  /** Ensambla el .zip en memoria a partir del nombre del proyecto y su modelo. */
-  private async buildZipBuffer(
-    projectName: string,
-    model: DiagramModel,
-  ): Promise<Buffer> {
+  /** Ensambla el .zip en memoria a partir del diagrama normalizado. */
+  private async buildZipBuffer(diagram: DiagramForGenerator): Promise<Buffer> {
     const zip = new JSZip();
 
-    zip.file('pom.xml', buildPomXml(projectName));
+    zip.file('pom.xml', buildPomXml(diagram.projectName));
     zip.file(
       'src/main/resources/application.properties',
-      buildApplicationProperties(projectName),
+      buildApplicationProperties(diagram.projectName),
     );
     zip.file(`${BASE_PACKAGE_PATH}/Application.java`, buildApplicationJava());
 
-    for (const file of buildEntityFiles(model)) {
+    for (const file of buildEntityFiles(diagram)) {
       zip.file(`${BASE_PACKAGE_PATH}/model/${file.name}`, file.content);
     }
 
@@ -209,21 +186,18 @@ public class Application {
 }
 
 // ---------------------------------------------------------------------------
-// Entidades JPA (nodes) + relaciones (edges/cardinalidades)
+// Entidades JPA (classes) + relaciones (relationships/cardinalidades)
 // ---------------------------------------------------------------------------
 
 function buildEntityFiles(
-  model: DiagramModel,
+  diagram: DiagramForGenerator,
 ): { name: string; content: string }[] {
-  const nodes = model.nodes ?? [];
-  const edges = model.edges ?? [];
-
   const builders = new Map<string, EntityBuilder>();
   const usedClassNames = new Set<string>();
 
-  nodes.forEach((node, index) => {
+  diagram.classes.forEach((classRow, index) => {
     const className = uniqueName(
-      toPascalCase(node.data?.name, `Entidad${index + 1}`),
+      toPascalCase(classRow.name, `Entidad${index + 1}`),
       usedClassNames,
     );
     const builder: EntityBuilder = {
@@ -233,15 +207,15 @@ function buildEntityFiles(
       usedFieldNames: new Set(['id']),
       extraImports: new Set(),
     };
-    addAttributeFields(builder, node.data?.attributes ?? []);
-    builders.set(node.id, builder);
+    addAttributeFields(builder, classRow.attributes);
+    builders.set(classRow.id, builder);
   });
 
-  for (const edge of edges) {
-    const source = builders.get(edge.source);
-    const target = builders.get(edge.target);
-    if (!source || !target) continue; // arista huerfana (nodo eliminado)
-    applyRelation(source, target, edge.data ?? {});
+  for (const relationship of diagram.relationships) {
+    const source = builders.get(relationship.sourceClassId);
+    const target = builders.get(relationship.targetClassId);
+    if (!source || !target) continue; // relación huerfana (clase eliminada)
+    applyRelation(source, target, relationship);
   }
 
   return [...builders.values()].map((builder) => ({
@@ -250,17 +224,17 @@ function buildEntityFiles(
   }));
 }
 
-/** Atributos de la clase (RF6) -> campos con @Column. */
-function addAttributeFields(builder: EntityBuilder, attributes: string[]) {
-  attributes.forEach((raw, index) => {
-    if (!raw || !raw.trim()) return;
-    const withoutVisibility = raw.trim().replace(/^[-+#~]\s*/, '');
-    const [namePart, typePart] = withoutVisibility.split(':');
+/** Atributos ya estructurados (RF6, tabla `attributes`) -> campos con @Column. */
+function addAttributeFields(
+  builder: EntityBuilder,
+  attributes: DiagramClass['attributes'],
+) {
+  attributes.forEach((attribute, index) => {
     const name = uniqueName(
-      toCamelCase(namePart, `campo${index + 1}`),
+      toCamelCase(attribute.name, `campo${index + 1}`),
       builder.usedFieldNames,
     );
-    const type = mapJavaType(typePart);
+    const type = mapJavaType(attribute.type);
     registerImportForType(builder, type);
     builder.fields.push({
       name,
@@ -274,11 +248,11 @@ function addAttributeFields(builder: EntityBuilder, attributes: string[]) {
 function applyRelation(
   source: EntityBuilder,
   target: EntityBuilder,
-  data: NonNullable<DiagramEdge['data']>,
+  relationship: DiagramRelationship,
 ) {
-  const relationName = data.relationName?.trim();
-  const sourceMany = isManyCardinality(data.sourceCardinality);
-  const targetMany = isManyCardinality(data.targetCardinality);
+  const relationName = relationship.name?.trim();
+  const sourceMany = isManyCardinality(relationship.sourceCardinality);
+  const targetMany = isManyCardinality(relationship.targetCardinality);
 
   if (sourceMany && targetMany) {
     applyManyToMany(source, target, relationName);
@@ -402,7 +376,7 @@ function applyManyToMany(
   });
 }
 
-function isManyCardinality(cardinality?: string): boolean {
+function isManyCardinality(cardinality?: string | null): boolean {
   return cardinality === 'N' || cardinality === '0..*';
 }
 

@@ -9,11 +9,64 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectModelDto } from './dto/update-project-model.dto';
 import { JoinProjectDto } from './dto/join-project.dto';
+import {
+  formatAttributeLine,
+  formatMethodLine,
+  parseAttributeLine,
+  parseMethodLine,
+} from '../common/uml-member.util';
 
 export type ProjectRole = 'OWNER' | 'COLLABORATOR';
 
+/**
+ * Forma que consume el editor (React Flow). Es la misma forma que antes se
+ * guardaba tal cual en `Project.modelData`; ahora se reconstruye desde las
+ * tablas relacionales (Diagram/ClassNode/Attribute/Method/Relationship) en
+ * cada lectura, para que el contrato REST no cambie.
+ */
+export interface DiagramModel {
+  nodes: Array<{
+    id: string;
+    type: 'classNode';
+    position: { x: number; y: number };
+    data: { name: string; attributes: string[]; methods: string[] };
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    type: 'customEdge';
+    data: {
+      relationName: string;
+      sourceCardinality: string;
+      targetCardinality: string;
+    };
+  }>;
+}
+
 /** Proyecto tal como se expone al frontend, con el rol del usuario que pide. */
-export type ProjectWithRole = Project & { role: ProjectRole };
+export type ProjectWithRole = Project & {
+  role: ProjectRole;
+  modelData: DiagramModel;
+};
+
+/** Filas normalizadas para el generador Spring Boot (RF7/RF14): sin pasar
+ * por el formateo a string que usa el editor (ver getDiagramForGenerator). */
+export interface DiagramForGenerator {
+  projectName: string;
+  classes: Array<{
+    id: string;
+    name: string;
+    attributes: Array<{ name: string; type: string }>;
+  }>;
+  relationships: Array<{
+    sourceClassId: string;
+    targetClassId: string;
+    name: string | null;
+    sourceCardinality: string | null;
+    targetCardinality: string | null;
+  }>;
+}
 
 const INVITE_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin 0/O/1/I
 
@@ -32,9 +85,20 @@ function generateInvitePassword(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+const DIAGRAM_INCLUDE = {
+  classes: {
+    include: {
+      attributes: { orderBy: { orderIndex: 'asc' as const } },
+      methods: { orderBy: { orderIndex: 'asc' as const } },
+    },
+  },
+  relationships: true,
+} satisfies Prisma.DiagramInclude;
+
 /**
  * RF3 / RF5 / RF6 / RF4 / RF10: gestión de proyectos, del diagrama asociado
- * y de la colaboración (invitación por código + contraseña).
+ * (guardado de forma relacional, ver DiagramModel arriba) y de la
+ * colaboración (invitación por código + contraseña).
  *
  * El acceso de LECTURA/ESCRITURA sobre el diagrama lo tiene el dueño y
  * cualquier colaborador que se haya unido (ProjectMember). Operaciones
@@ -57,6 +121,9 @@ export class ProjectsService {
             ownerId,
             inviteCode: generateInviteCode(),
             invitePassword: generateInvitePassword(),
+            // RF5: cada proyecto nace con su diagrama (vacío) — es un 1:1,
+            // no hace falta crearlo "on demand" al primer guardado.
+            diagram: { create: {} },
           },
         });
       } catch (err) {
@@ -76,7 +143,9 @@ export class ProjectsService {
   }
 
   /** RF3: proyectos propios + RF10: proyectos ajenos donde el usuario colabora. */
-  async findAllForUser(userId: string): Promise<ProjectWithRole[]> {
+  async findAllForUser(
+    userId: string,
+  ): Promise<Array<Project & { role: ProjectRole }>> {
     const [owned, memberships] = await Promise.all([
       this.prisma.project.findMany({
         where: { ownerId: userId },
@@ -89,11 +158,11 @@ export class ProjectsService {
       }),
     ]);
 
-    const ownedWithRole: ProjectWithRole[] = owned.map((p) =>
-      this.redactInvite({ ...p, role: 'OWNER' }),
+    const ownedWithRole = owned.map((p) =>
+      this.redactInvite({ ...p, role: 'OWNER' as const }),
     );
-    const memberWithRole: ProjectWithRole[] = memberships.map((m) =>
-      this.redactInvite({ ...m.project, role: 'COLLABORATOR' }),
+    const memberWithRole = memberships.map((m) =>
+      this.redactInvite({ ...m.project, role: 'COLLABORATOR' as const }),
     );
 
     return [...ownedWithRole, ...memberWithRole].sort(
@@ -101,35 +170,113 @@ export class ProjectsService {
     );
   }
 
-  /** Proyecto individual (incluye modelData) para dueño o colaborador. */
+  /** Proyecto individual (incluye el diagrama) para dueño o colaborador. */
   async findOneAccessible(
     userId: string,
     id: string,
   ): Promise<ProjectWithRole> {
-    const { project, role } = await this.getAccessibleOrThrow(userId, id);
-    return this.redactInvite({ ...project, role });
+    const { role } = await this.getAccessibleOrThrow(userId, id);
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id },
+      include: { diagram: { include: DIAGRAM_INCLUDE } },
+    });
+    const { diagram, ...rest } = project;
+    return this.redactInvite({
+      ...rest,
+      role,
+      modelData: diagram
+        ? this.toDiagramModel(diagram)
+        : { nodes: [], edges: [] },
+    });
   }
 
-  /** RF5/RF6: guarda el estado del diagrama (dueño o colaborador pueden editar). */
+  /**
+   * RF5/RF6/RF9: guarda el diagrama completo (dueño o colaborador pueden
+   * editar). Reemplazo transaccional total: se borran las clases/relaciones
+   * previas del diagrama y se recrean con lo que manda el editor — mismo
+   * patrón "guardar el estado completo" que antes usaba Project.modelData,
+   * ahora sobre tablas relacionales en vez de un JSON.
+   */
   async updateModel(
     userId: string,
     id: string,
     dto: UpdateProjectModelDto,
-  ): Promise<Project> {
+  ): Promise<ProjectWithRole> {
     await this.getAccessibleOrThrow(userId, id);
-    return this.prisma.project.update({
-      where: { id },
-      data: {
-        modelData: {
-          nodes: dto.nodes,
-          edges: dto.edges,
-        } as Prisma.InputJsonValue,
-      },
+
+    await this.prisma.$transaction(async (tx) => {
+      // Todo proyecto tiene su diagrama desde que se creó (ver create()).
+      const diagram = await tx.diagram.findUniqueOrThrow({
+        where: { projectId: id },
+      });
+
+      // Las relaciones se borran antes que las clases por las FKs; borrar
+      // las clases además arrastra en cascada sus atributos/métodos.
+      await tx.relationship.deleteMany({ where: { diagramId: diagram.id } });
+      await tx.classNode.deleteMany({ where: { diagramId: diagram.id } });
+
+      const nodeIds = new Set(dto.nodes.map((node) => node.id));
+
+      for (const node of dto.nodes) {
+        await tx.classNode.create({
+          data: {
+            id: node.id,
+            diagramId: diagram.id,
+            name: node.data?.name?.trim() || 'Clase',
+            positionX: node.position?.x ?? 0,
+            positionY: node.position?.y ?? 0,
+            attributes: {
+              create: (node.data?.attributes ?? [])
+                .filter((raw) => raw && raw.trim())
+                .map((raw, index) => ({
+                  ...parseAttributeLine(raw),
+                  orderIndex: index,
+                })),
+            },
+            methods: {
+              create: (node.data?.methods ?? [])
+                .filter((raw) => raw && raw.trim())
+                .map((raw, index) => ({
+                  ...parseMethodLine(raw),
+                  orderIndex: index,
+                })),
+            },
+          },
+        });
+      }
+
+      // Aristas huérfanas (nodo eliminado en el mismo guardado): se
+      // descartan, igual que ya hacía defensivamente el generador.
+      const validEdges = dto.edges.filter(
+        (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target),
+      );
+      if (validEdges.length) {
+        await tx.relationship.createMany({
+          data: validEdges.map((edge) => ({
+            id: edge.id,
+            diagramId: diagram.id,
+            sourceClassId: edge.source,
+            targetClassId: edge.target,
+            name: edge.data?.relationName || null,
+            sourceCardinality: edge.data?.sourceCardinality || null,
+            targetCardinality: edge.data?.targetCardinality || null,
+          })),
+        });
+      }
+
+      // RF9: refleja el guardado en Project.updatedAt (lo usa el dashboard).
+      await tx.project.update({
+        where: { id },
+        data: { updatedAt: new Date() },
+      });
     });
+
+    return this.findOneAccessible(userId, id);
   }
 
   async remove(ownerId: string, id: string): Promise<{ id: string }> {
     await this.getOwnedOrThrow(ownerId, id);
+    // Cascada: Project -> Diagram -> ClassNode -> Attribute/Method/Relationship.
     await this.prisma.project.delete({ where: { id } });
     return { id };
   }
@@ -177,6 +324,48 @@ export class ProjectsService {
     return { id: project.id, name: project.name, role: 'COLLABORATOR' };
   }
 
+  /**
+   * RF7/RF14: filas normalizadas listas para el generador Spring Boot, sin
+   * pasar por el formateo a string que usa el editor (evita un viaje
+   * structured -> string -> structured innecesario).
+   */
+  async getDiagramForGenerator(
+    userId: string,
+    id: string,
+  ): Promise<DiagramForGenerator> {
+    const { project } = await this.getAccessibleOrThrow(userId, id);
+    const diagram = await this.prisma.diagram.findUnique({
+      where: { projectId: id },
+      include: {
+        classes: {
+          include: { attributes: { orderBy: { orderIndex: 'asc' } } },
+        },
+        relationships: true,
+      },
+    });
+    if (!diagram)
+      return { projectName: project.name, classes: [], relationships: [] };
+
+    return {
+      projectName: project.name,
+      classes: diagram.classes.map((classRow) => ({
+        id: classRow.id,
+        name: classRow.name,
+        attributes: classRow.attributes.map((attr) => ({
+          name: attr.name,
+          type: attr.type,
+        })),
+      })),
+      relationships: diagram.relationships.map((rel) => ({
+        sourceClassId: rel.sourceClassId,
+        targetClassId: rel.targetClassId,
+        name: rel.name,
+        sourceCardinality: rel.sourceCardinality,
+        targetCardinality: rel.targetCardinality,
+      })),
+    };
+  }
+
   /** Busca el proyecto y comprueba que pertenece al usuario (dueño). */
   private async getOwnedOrThrow(ownerId: string, id: string): Promise<Project> {
     const project = await this.prisma.project.findUnique({ where: { id } });
@@ -210,8 +399,54 @@ export class ProjectsService {
     return { project, role: 'COLLABORATOR' };
   }
 
+  /** Convierte el diagrama relacional a la forma { nodes, edges } de React Flow. */
+  private toDiagramModel(diagram: {
+    classes: Array<{
+      id: string;
+      name: string;
+      positionX: number;
+      positionY: number;
+      attributes: Array<{ name: string; type: string }>;
+      methods: Array<{ name: string; parameters: string; returnType: string }>;
+    }>;
+    relationships: Array<{
+      id: string;
+      sourceClassId: string;
+      targetClassId: string;
+      name: string | null;
+      sourceCardinality: string | null;
+      targetCardinality: string | null;
+    }>;
+  }): DiagramModel {
+    return {
+      nodes: diagram.classes.map((classRow) => ({
+        id: classRow.id,
+        type: 'classNode',
+        position: { x: classRow.positionX, y: classRow.positionY },
+        data: {
+          name: classRow.name,
+          attributes: classRow.attributes.map(formatAttributeLine),
+          methods: classRow.methods.map(formatMethodLine),
+        },
+      })),
+      edges: diagram.relationships.map((rel) => ({
+        id: rel.id,
+        source: rel.sourceClassId,
+        target: rel.targetClassId,
+        type: 'customEdge',
+        data: {
+          relationName: rel.name ?? '',
+          sourceCardinality: rel.sourceCardinality ?? '',
+          targetCardinality: rel.targetCardinality ?? '',
+        },
+      })),
+    };
+  }
+
   /** Oculta la contraseña de invitación a quien no sea el dueño. */
-  private redactInvite(project: ProjectWithRole): ProjectWithRole {
+  private redactInvite<T extends { role: ProjectRole; invitePassword: string }>(
+    project: T,
+  ): T {
     if (project.role === 'OWNER') return project;
     return { ...project, invitePassword: '' };
   }

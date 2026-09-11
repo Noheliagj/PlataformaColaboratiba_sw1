@@ -33,9 +33,6 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // RF5/RF6: estado del diagrama UML (nodes + edges de React Flow).
-  modelData Json?
-
   // RF4: credenciales de invitación para unirse como colaborador.
   // Se generan una sola vez al crear el proyecto (ver ProjectsService.create).
   inviteCode     String @unique
@@ -47,6 +44,9 @@ model Project {
 
   // RF4/RF10: colaboradores que se unieron con (inviteCode, invitePassword).
   members ProjectMember[]
+
+  // RF5/RF6/RF8: diagrama relacional del proyecto (1:1, ver Diagram).
+  diagram Diagram?
 
   @@index([ownerId])
   @@map("projects")
@@ -66,4 +66,116 @@ model ProjectMember {
   @@unique([projectId, userId])
   @@index([userId])
   @@map("project_members")
+}
+
+// RF6: visibilidad UML de un atributo o método (-, +, #, ~).
+enum Visibility {
+  PUBLIC
+  PRIVATE
+  PROTECTED
+  PACKAGE
+}
+
+// RF7: tipo de relación entre clases. INHERITANCE queda listo para cuando
+// se agregue su UI; hoy el editor solo produce ASSOCIATION.
+enum RelationshipType {
+  ASSOCIATION
+  INHERITANCE
+}
+
+// RF5/RF9: diagrama de un proyecto. 1:1 con Project -- la app no tiene UI
+// de "varios diagramas por proyecto", así que no se modela esa relación
+// para no sobreingenierizar.
+model Diagram {
+  id        String   @id @default(uuid())
+  name      String   @default("Diagrama principal")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  classes       ClassNode[]
+  relationships Relationship[]
+
+  @@map("diagrams")
+}
+
+// RF6: una clase UML del diagrama (equivale a un nodo de React Flow).
+model ClassNode {
+  id        String   @id @default(uuid())
+  name      String
+  // Posición en el lienzo (React Flow), se conserva para no reordenar
+  // el diagrama en cada carga.
+  positionX Float    @default(0)
+  positionY Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  diagramId String
+  diagram   Diagram @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+
+  attributes Attribute[]
+  methods    Method[]
+
+  relationsAsSource Relationship[] @relation("SourceClass")
+  relationsAsTarget Relationship[] @relation("TargetClass")
+
+  @@index([diagramId])
+  @@map("classes")
+}
+
+// RF6: atributo de una clase.
+model Attribute {
+  id         String     @id @default(uuid())
+  name       String
+  type       String     @default("String")
+  visibility Visibility @default(PRIVATE)
+  // Conserva el orden en que el usuario los listó en el panel lateral.
+  orderIndex Int        @default(0)
+
+  classId String
+  class   ClassNode @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@map("attributes")
+}
+
+// RF6: método de una clase (hoy decorativo: el generador Spring Boot no
+// produce código Java a partir de métodos, igual que antes de este cambio).
+model Method {
+  id         String     @id @default(uuid())
+  name       String
+  returnType String     @default("void")
+  parameters String     @default("")
+  visibility Visibility @default(PUBLIC)
+  orderIndex Int        @default(0)
+
+  classId String
+  class   ClassNode @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@map("methods")
+}
+
+// RF7: asociación (o herencia, a futuro) entre dos clases del mismo diagrama.
+model Relationship {
+  id                String           @id @default(uuid())
+  type              RelationshipType @default(ASSOCIATION)
+  name              String?
+  sourceCardinality String?
+  targetCardinality String?
+  createdAt         DateTime         @default(now())
+
+  diagramId String
+  diagram   Diagram @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+
+  sourceClassId String
+  sourceClass   ClassNode @relation("SourceClass", fields: [sourceClassId], references: [id], onDelete: Cascade)
+
+  targetClassId String
+  targetClass   ClassNode @relation("TargetClass", fields: [targetClassId], references: [id], onDelete: Cascade)
+
+  @@index([diagramId])
+  @@map("relationships")
 }
