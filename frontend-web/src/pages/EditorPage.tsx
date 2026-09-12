@@ -17,6 +17,7 @@ import { ClassNode, type ClassNodeData } from '../components/ClassNode';
 import { CustomEdge, type ClassEdgeData } from '../components/CustomEdge';
 import { Sidebar } from '../components/Sidebar';
 import { EditorHeader } from '../components/EditorHeader';
+import { EditorToolsPanel } from '../components/EditorToolsPanel';
 import { HistoryPanel } from '../components/HistoryPanel';
 import { ChatIA } from '../components/ChatIA';
 import { useTheme } from '../lib/useTheme';
@@ -100,6 +101,10 @@ export function EditorPage() {
 
   // RF11: asistente de IA.
   const [assistantOpen, setAssistantOpen] = useState(false);
+
+  // Panel lateral de herramientas (modelado, XMI, Vision, tema): colapsado
+  // por defecto para dejarle todo el espacio posible al lienzo.
+  const [toolsExpanded, setToolsExpanded] = useState(false);
 
   const handleAuthError = useCallback(
     (err: unknown): boolean => {
@@ -432,22 +437,10 @@ export function EditorPage() {
         statusMeta={statusMeta}
         remoteEditor={remoteEditor}
         presence={presence}
-        exporting={exporting}
         saving={saving}
-        importingImage={importingImage}
-        importingXmi={importingXmi}
-        exportingXmi={exportingXmi}
-        theme={theme}
-        onToggleTheme={toggleTheme}
         onBack={() => navigate('/')}
-        onAddClass={addClass}
-        onExportSpring={handleExportSpring}
         onSave={handleSave}
         onOpenHistory={() => setHistoryOpen(true)}
-        onToggleAssistant={() => setAssistantOpen((prev) => !prev)}
-        onImportImage={handleImportImage}
-        onExportXmi={handleExportXmi}
-        onImportXmi={handleImportXmi}
       />
 
       {id && (
@@ -480,48 +473,68 @@ export function EditorPage() {
         </div>
       )}
 
-      {/* Lienzo */}
-      <div className="relative flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          defaultEdgeOptions={{ type: 'customEdge' }}
-          onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
-          onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
-          onPaneClick={() => setSelection(null)}
-          colorMode={theme}
-          fitView
-        >
-          <Background
-            color={theme === 'dark' ? '#1b1c20' : '#dcdce0'}
-            gap={22}
-            size={1}
-          />
-          <Controls />
-        </ReactFlow>
+      <div className="relative flex flex-1 overflow-hidden">
+        <EditorToolsPanel
+          expanded={toolsExpanded}
+          onToggleExpanded={() => setToolsExpanded((prev) => !prev)}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          exporting={exporting}
+          importingImage={importingImage}
+          importingXmi={importingXmi}
+          exportingXmi={exportingXmi}
+          assistantOpen={assistantOpen}
+          onAddClass={addClass}
+          onExportSpring={handleExportSpring}
+          onToggleAssistant={() => setAssistantOpen((prev) => !prev)}
+          onImportImage={handleImportImage}
+          onExportXmi={handleExportXmi}
+          onImportXmi={handleImportXmi}
+        />
 
-        {selectedNode && (
-          <Sidebar
-            kind="node"
-            data={selectedNode.data}
-            onChange={updateSelectedNode}
-            onClose={() => setSelection(null)}
-          />
-        )}
+        {/* Lienzo */}
+        <div className="relative flex-1">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            defaultEdgeOptions={{ type: 'customEdge' }}
+            onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
+            onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
+            onPaneClick={() => setSelection(null)}
+            colorMode={theme}
+            fitView
+          >
+            <Background
+              color={theme === 'dark' ? '#1b1c20' : '#dcdce0'}
+              gap={22}
+              size={1}
+            />
+            <Controls />
+          </ReactFlow>
 
-        {selectedEdge && (
-          <Sidebar
-            kind="edge"
-            data={(selectedEdge.data ?? {}) as ClassEdgeData}
-            onChange={updateSelectedEdge}
-            onClose={() => setSelection(null)}
-          />
-        )}
+          {selectedNode && (
+            <Sidebar
+              kind="node"
+              data={selectedNode.data}
+              onChange={updateSelectedNode}
+              onClose={() => setSelection(null)}
+            />
+          )}
+
+          {selectedEdge && (
+            <Sidebar
+              kind="edge"
+              data={(selectedEdge.data ?? {}) as ClassEdgeData}
+              onChange={updateSelectedEdge}
+              onClose={() => setSelection(null)}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
