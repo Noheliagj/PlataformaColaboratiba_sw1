@@ -1,6 +1,8 @@
 import { LogOut } from 'lucide-react';
 import { Brand } from './ui/Brand';
 import { Button } from './ui/Button';
+import { ThemeToggle } from './ui/ThemeToggle';
+import { useTheme } from '../lib/useTheme';
 import type { AuthUser } from '../services/auth';
 
 interface NavbarProps {
@@ -10,6 +12,7 @@ interface NavbarProps {
 
 /** Barra superior del dashboard: marca, identidad del usuario y salida. */
 export function Navbar({ user, onLogout }: NavbarProps) {
+  const [theme, toggleTheme] = useTheme();
   const initials = user.name
     .split(' ')
     .map((p) => p[0])
@@ -37,6 +40,8 @@ export function Navbar({ user, onLogout }: NavbarProps) {
               </span>
             </span>
           </div>
+
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
 
           <Button
             variant="secondary"

@@ -117,3 +117,84 @@ export const AI_TOOLS: Anthropic.Messages.Tool[] = [
     },
   },
 ];
+
+/**
+ * Importación de diagramas por imagen (Vision, ver IaService.importFromImage):
+ * a diferencia de AI_TOOLS (mutaciones puntuales sobre un diagrama que ya
+ * existe), esta herramienta única extrae el diagrama COMPLETO que aparece en
+ * la foto/captura en una sola llamada forzada (tool_choice), sin conversación.
+ */
+export const DIAGRAM_EXTRACTION_TOOL: Anthropic.Messages.Tool = {
+  name: 'extraer_diagrama',
+  description:
+    'Registra todas las clases, atributos, métodos y relaciones de un diagrama de clases UML detectadas en una imagen.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      classes: {
+        type: 'array',
+        description: 'Todas las clases visibles en la imagen.',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Nombre de la clase (ej. Cliente).' },
+            attributes: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  type: {
+                    type: 'string',
+                    description: 'Tipo del atributo. "String" si no es legible o no se indica.',
+                  },
+                },
+                required: ['name'],
+              },
+            },
+            methods: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  returnType: { type: 'string', description: '"void" si no se indica.' },
+                  parameters: { type: 'string', description: 'Ej. "id: Long".' },
+                },
+                required: ['name'],
+              },
+            },
+          },
+          required: ['name'],
+        },
+      },
+      relationships: {
+        type: 'array',
+        description: 'Asociaciones o herencias entre las clases detectadas.',
+        items: {
+          type: 'object',
+          properties: {
+            sourceClassName: { type: 'string' },
+            targetClassName: { type: 'string' },
+            name: { type: 'string', description: 'Nombre de la relación, si tiene una.' },
+            sourceCardinality: {
+              type: 'string',
+              description: 'Cardinalidad junto a la clase de origen: "1", "0..1", "N" o "0..*".',
+            },
+            targetCardinality: {
+              type: 'string',
+              description: 'Cardinalidad junto a la clase de destino.',
+            },
+            type: {
+              type: 'string',
+              enum: ['ASSOCIATION', 'INHERITANCE'],
+              description: '"INHERITANCE" si se ve una flecha de herencia (triángulo hueco).',
+            },
+          },
+          required: ['sourceClassName', 'targetClassName'],
+        },
+      },
+    },
+    required: ['classes'],
+  },
+};

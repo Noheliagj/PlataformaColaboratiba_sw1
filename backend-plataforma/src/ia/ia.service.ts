@@ -1,9 +1,14 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
-import { DiagramForGenerator, DiagramModel, ProjectsService } from '../projects/projects.service';
+import {
+  DiagramForGenerator,
+  DiagramModel,
+  ProjectsService,
+  StructuredDiagramInput,
+} from '../projects/projects.service';
 import { DiagramGateway } from '../websockets/diagram.gateway';
-import { AI_TOOLS } from './ia-tools';
+import { AI_TOOLS, DIAGRAM_EXTRACTION_TOOL } from './ia-tools';
 import { ChatMessageDto } from './dto/ai-chat.dto';
 
 const DEFAULT_MODEL = 'claude-sonnet-5';
@@ -11,6 +16,17 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
 // no dejar una conversación en loop infinito si el modelo insiste en llamar
 // herramientas sin nunca cerrar con una respuesta de texto.
 const MAX_TOOL_ROUNDS = 4;
+
+/** Formatos de imagen que acepta la API de Vision de Anthropic. */
+const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+type AllowedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
+
+/** Subconjunto de Express.Multer.File que usa este servicio (ver IaController). */
+export interface UploadedImageFile {
+  buffer: Buffer;
+  mimetype: string;
+  size: number;
+}
 
 interface ToolExecutionResult {
   modelData?: DiagramModel;
@@ -187,6 +203,91 @@ export class IaService {
       this.logger.warn(`Fallo ejecutando "${name}": ${(err as Error).message}`);
       return { error: err instanceof Error ? err.message : 'Error desconocido' };
     }
+  }
+
+  /**
+   * Importación de diagramas por imagen (Vision): interpreta una foto o
+   * captura de un diagrama de clases y reemplaza el diagrama del proyecto
+   * con lo detectado (ver ProjectsService.importStructuredModel). El cambio
+   * se retransmite en vivo por WebSocket igual que las mutaciones de chat
+   * (RF10/RF11).
+   */
+  async importFromImage(
+    userId: string,
+    userName: string,
+    projectId: string,
+    file: UploadedImageFile | undefined,
+  ): Promise<{ modelData: DiagramModel; summary: string }> {
+    if (!this.client) {
+      throw new ServiceUnavailableException(
+        'El asistente de IA no está configurado: falta ANTHROPIC_API_KEY en backend-plataforma/.env.',
+      );
+    }
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Debes subir una imagen del diagrama');
+    }
+    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype as AllowedImageType)) {
+      throw new BadRequestException(
+        'Formato de imagen no soportado (usa PNG, JPG, WEBP o GIF)',
+      );
+    }
+
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 4096,
+      system:
+        'Eres un experto en UML. Analiza la imagen de un diagrama de clases (foto, captura o dibujo a mano) ' +
+        'y usa la herramienta "extraer_diagrama" para registrar exactamente lo que ves: no inventes clases, ' +
+        'atributos, métodos ni relaciones que no estén presentes en la imagen.',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: file.mimetype as AllowedImageType,
+                data: file.buffer.toString('base64'),
+              },
+            },
+            {
+              type: 'text',
+              text: 'Extrae todas las clases (con sus atributos y métodos) y todas las relaciones (con cardinalidad si es visible) de este diagrama de clases UML.',
+            },
+          ],
+        },
+      ],
+      tools: [DIAGRAM_EXTRACTION_TOOL],
+      tool_choice: { type: 'tool', name: 'extraer_diagrama' },
+    });
+
+    const toolUse = response.content.find(
+      (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
+    );
+    const extracted = toolUse?.input as StructuredDiagramInput | undefined;
+    if (!extracted?.classes?.length) {
+      throw new BadRequestException(
+        'No se detectaron clases en la imagen. Prueba con una foto más nítida o mejor encuadrada.',
+      );
+    }
+
+    const { modelData } = await this.projects.importStructuredModel(
+      userId,
+      projectId,
+      extracted,
+      'IMPORT_IMAGE',
+    );
+    this.gateway.broadcastDiagramUpdate(projectId, modelData, { userId, userName });
+
+    const relCount = extracted.relationships?.length ?? 0;
+    return {
+      modelData,
+      summary:
+        `Se importaron ${extracted.classes.length} clase(s)` +
+        (relCount ? ` y ${relCount} relación(es)` : '') +
+        ' desde la imagen.',
+    };
   }
 
   private buildSystemPrompt(diagram: DiagramForGenerator): string {

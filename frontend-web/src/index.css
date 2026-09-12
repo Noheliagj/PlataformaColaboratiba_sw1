@@ -46,6 +46,54 @@
   --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
 }
 
+/*
+ * Tema claro (opcional): el oscuro de arriba sigue siendo el predeterminado
+ * (sin atributo o data-theme="dark"). Este bloque no está dentro de @theme
+ * porque las utilidades ya quedaron generadas con esos nombres; acá solo se
+ * redefinen las variables para quien active data-theme="light" (ver
+ * components/ui/ThemeToggle.tsx). Al no estar dentro de ningún @layer, este
+ * override gana siempre sobre la capa "theme" de Tailwind sin importar el
+ * orden en el archivo.
+ */
+:root[data-theme='light'] {
+  --color-canvas: #f7f7f8;
+  --color-sunken: #f0f0f2;
+  --color-surface: #ffffff;
+  --color-raised: #f4f4f6;
+  --color-overlay: #e9e9ec;
+
+  --color-hairline: rgba(15, 15, 20, 0.08);
+  --color-hairline-strong: rgba(15, 15, 20, 0.14);
+
+  --color-ink: #101113;
+  --color-ink-soft: #45464e;
+  --color-ink-muted: #6b6c76;
+  --color-ink-faint: #9a9ba5;
+
+  --color-accent: #5e6ad2;
+  --color-accent-hi: #4c57b8;
+  --color-accent-lo: #7c86e6;
+  --color-accent-soft: rgba(94, 106, 210, 0.1);
+
+  --color-positive: #1a9c63;
+  --color-critical: #d0292e;
+  --color-critical-soft: rgba(208, 41, 46, 0.1);
+
+  --shadow-sm: 0 1px 2px rgba(15, 15, 20, 0.06);
+  --shadow-md: 0 8px 24px -8px rgba(15, 15, 20, 0.12);
+  --shadow-lg: 0 24px 60px -20px rgba(15, 15, 20, 0.18);
+}
+
+:root[data-theme='light'] .bg-grid {
+  background-image:
+    linear-gradient(rgba(15, 15, 20, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 15, 20, 0.035) 1px, transparent 1px);
+}
+
+:root[data-theme='light'] .bg-halo {
+  background: radial-gradient(60rem 40rem at 50% -10%, rgba(94, 106, 210, 0.08), transparent 60%);
+}
+
 html,
 body,
 #root {

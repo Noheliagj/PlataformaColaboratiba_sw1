@@ -11,7 +11,7 @@ import {
 import type { Connection, Edge, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { Socket } from 'socket.io-client';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Check } from 'lucide-react';
 import axios from 'axios';
 import { ClassNode, type ClassNodeData } from '../components/ClassNode';
 import { CustomEdge, type ClassEdgeData } from '../components/CustomEdge';
@@ -19,12 +19,15 @@ import { Sidebar } from '../components/Sidebar';
 import { EditorHeader } from '../components/EditorHeader';
 import { HistoryPanel } from '../components/HistoryPanel';
 import { ChatIA } from '../components/ChatIA';
+import { useTheme } from '../lib/useTheme';
 import {
   downloadSpringBootProject,
   getProject,
   saveProjectModel,
   type ProjectRole,
 } from '../services/projects';
+import { importDiagramFromImage } from '../services/ai';
+import { exportProjectXmi, importProjectXmi } from '../services/xmi';
 import { clearSession } from '../services/auth';
 import { getErrorMessage } from '../services/http-error';
 import {
@@ -70,6 +73,16 @@ export function EditorPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // RF18/Vision/XMI: estados de carga de las importaciones/exportaciones
+  // adicionales del editor (no bloquean el guardado normal del diagrama).
+  const [importingImage, setImportingImage] = useState(false);
+  const [importingXmi, setImportingXmi] = useState(false);
+  const [exportingXmi, setExportingXmi] = useState(false);
+
+  // Selector de tema claro/oscuro (oscuro por defecto, ver lib/theme.ts).
+  const [theme, toggleTheme] = useTheme();
 
   // RF10: colaboración en tiempo real vía WebSocket.
   const socketRef = useRef<Socket | null>(null);
@@ -310,12 +323,89 @@ export function EditorPage() {
     }
   }, [id, projectName, handleAuthError]);
 
+  /**
+   * Importación de diagramas por imagen (Vision): la IA interpreta la foto o
+   * captura y reemplaza el diagrama del proyecto (persistido en el backend).
+   * El cambio llega al lienzo por el mismo canal que el resto de RF11/RF10:
+   * el WebSocket 'diagram-update' que emite el backend tras aplicar el
+   * import, no la respuesta HTTP — así todos los colaboradores conectados
+   * lo ven igual, incluido quien lo subió.
+   */
+  const handleImportImage = useCallback(
+    async (file: File) => {
+      if (!id) return;
+      setImportingImage(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const result = await importDiagramFromImage(id, file);
+        setNotice(result.summary);
+      } catch (err) {
+        if (!handleAuthError(err)) {
+          setError(
+            getErrorMessage(err, 'No se pudo interpretar la imagen del diagrama'),
+          );
+        }
+      } finally {
+        setImportingImage(false);
+      }
+    },
+    [id, handleAuthError],
+  );
+
+  // RF12: descarga el diagrama actual como .xmi (XMI 2.1).
+  const handleExportXmi = useCallback(async () => {
+    if (!id) return;
+    setExportingXmi(true);
+    setError(null);
+    try {
+      await exportProjectXmi(id, projectName || 'proyecto');
+    } catch (err) {
+      if (!handleAuthError(err)) {
+        setError(getErrorMessage(err, 'No se pudo exportar el diagrama a XMI'));
+      }
+    } finally {
+      setExportingXmi(false);
+    }
+  }, [id, projectName, handleAuthError]);
+
+  // RF13: importa un .xmi y reemplaza el diagrama (mismo mecanismo de
+  // actualización en vivo que handleImportImage, ver comentario arriba).
+  const handleImportXmi = useCallback(
+    async (file: File) => {
+      if (!id) return;
+      setImportingXmi(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const result = await importProjectXmi(id, file);
+        setNotice(
+          `Se importaron ${result.importedClasses} clase(s) desde el archivo XMI.`,
+        );
+      } catch (err) {
+        if (!handleAuthError(err)) {
+          setError(getErrorMessage(err, 'No se pudo importar el archivo XMI'));
+        }
+      } finally {
+        setImportingXmi(false);
+      }
+    },
+    [id, handleAuthError],
+  );
+
   // Oculta el aviso "X está editando…" a los pocos segundos.
   useEffect(() => {
     if (!remoteEditor) return;
     const timer = setTimeout(() => setRemoteEditor(null), 2500);
     return () => clearTimeout(timer);
   }, [remoteEditor]);
+
+  // Oculta el aviso de éxito (import de imagen/XMI) a los pocos segundos.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const selectedNode =
     selection?.kind === 'node'
@@ -344,12 +434,20 @@ export function EditorPage() {
         presence={presence}
         exporting={exporting}
         saving={saving}
+        importingImage={importingImage}
+        importingXmi={importingXmi}
+        exportingXmi={exportingXmi}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onBack={() => navigate('/')}
         onAddClass={addClass}
         onExportSpring={handleExportSpring}
         onSave={handleSave}
         onOpenHistory={() => setHistoryOpen(true)}
         onToggleAssistant={() => setAssistantOpen((prev) => !prev)}
+        onImportImage={handleImportImage}
+        onExportXmi={handleExportXmi}
+        onImportXmi={handleImportXmi}
       />
 
       {id && (
@@ -375,6 +473,13 @@ export function EditorPage() {
         </div>
       )}
 
+      {!error && notice && (
+        <div className="animate-fade-rise absolute top-14 left-1/2 z-30 flex -translate-x-1/2 items-start gap-2 rounded-lg border border-positive/40 bg-positive/10 px-3 py-2.5 text-[13px] text-positive shadow-lg backdrop-blur-md">
+          <Check size={16} className="mt-0.5 shrink-0" />
+          <span className="max-w-xs">{notice}</span>
+        </div>
+      )}
+
       {/* Lienzo */}
       <div className="relative flex-1">
         <ReactFlow
@@ -389,10 +494,14 @@ export function EditorPage() {
           onNodeClick={(_, node) => setSelection({ kind: 'node', id: node.id })}
           onEdgeClick={(_, edge) => setSelection({ kind: 'edge', id: edge.id })}
           onPaneClick={() => setSelection(null)}
-          colorMode="dark"
+          colorMode={theme}
           fitView
         >
-          <Background color="#1b1c20" gap={22} size={1} />
+          <Background
+            color={theme === 'dark' ? '#1b1c20' : '#dcdce0'}
+            gap={22}
+            size={1}
+          />
           <Controls />
         </ReactFlow>
 

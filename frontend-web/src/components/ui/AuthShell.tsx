@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Brand } from './Brand';
+import { ThemeToggle } from './ThemeToggle';
+import { useTheme } from '../../lib/useTheme';
 
 const HIGHLIGHTS = [
   'Diagramas de clases colaborativos en tiempo real',
@@ -13,8 +15,15 @@ const HIGHLIGHTS = [
  * izquierda (solo escritorio) y contenido del formulario a la derecha.
  */
 export function AuthShell({ children }: { children: ReactNode }) {
+  const [theme, toggleTheme] = useTheme();
+
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
+    <div className="relative grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
+      <ThemeToggle
+        theme={theme}
+        onToggle={toggleTheme}
+        className="absolute top-5 right-5 z-10"
+      />
       {/* Panel de marca */}
       <aside className="bg-halo relative hidden flex-col justify-between overflow-hidden border-r border-hairline bg-sunken p-12 lg:flex">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-60" />

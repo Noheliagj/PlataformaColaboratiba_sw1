@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Check, Loader2, Send, Sparkles, X } from 'lucide-react';
+import { Check, Loader2, Mic, MicOff, Send, Sparkles, X } from 'lucide-react';
 import { sendAiMessage } from '../services/ai';
 import type { ChatMessage } from '../services/ai';
 import { getErrorMessage } from '../services/http-error';
@@ -21,6 +21,40 @@ const EXAMPLES = [
   'Crea una relación entre Cliente y Pedido',
 ];
 
+/**
+ * RF18: soporte de voz vía Web Speech API. No forma parte del DOM estándar
+ * de TypeScript (es experimental, con prefijo "webkit" en Chrome/Edge), así
+ * que se declara aquí el subconjunto mínimo que usa este componente en vez
+ * de traer una librería solo para los tipos.
+ */
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+interface SpeechRecognitionEventLike extends Event {
+  results: ArrayLike<SpeechRecognitionResultLike>;
+  resultIndex: number;
+}
+interface SpeechRecognitionLike extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 /** RF11 - Asistente de IA: comandos en lenguaje natural sobre el diagrama. */
 export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -29,24 +63,43 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // RF18: comandos por voz (Web Speech API del navegador).
+  const [listening, setListening] = useState(false);
+  const [voiceSupported] = useState(() => getSpeechRecognitionCtor() !== null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, sending]);
 
+  // Si se cierra el panel, corta cualquier reconocimiento en curso.
+  useEffect(() => {
+    if (!open) {
+      recognitionRef.current?.stop();
+      setListening(false);
+    }
+  }, [open]);
+
+  // Al desmontar el componente, corta el micrófono si seguía activo.
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
   if (!open) return null;
 
-  async function handleSend(e: FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || sending) return;
+  async function sendMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
 
     const history: ChatMessage[] = messages.map(({ role, content }) => ({ role, content }));
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
+    setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
     setInput('');
     setError(null);
     setSending(true);
     try {
-      const result = await sendAiMessage(projectId, text, history);
+      const result = await sendAiMessage(projectId, trimmed, history);
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: result.reply, actions: result.actions },
@@ -56,6 +109,57 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
     } finally {
       setSending(false);
     }
+  }
+
+  async function handleSend(e: FormEvent) {
+    e.preventDefault();
+    await sendMessage(input);
+  }
+
+  /**
+   * RF18: al hablar, el texto se transcribe en vivo en el input; cuando el
+   * navegador entrega el resultado final, se envía automáticamente a la IA
+   * (mismo camino que si el usuario lo hubiera escrito y enviado a mano).
+   */
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) {
+      setError('Este navegador no soporta comandos por voz (usa Chrome o Edge).');
+      return;
+    }
+
+    const recognition = new Ctor();
+    recognition.lang = 'es-ES';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      let transcript = '';
+      let isFinal = false;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        transcript += result[0].transcript;
+        if (result.isFinal) isFinal = true;
+      }
+      setInput(transcript);
+      if (isFinal && transcript.trim()) {
+        void sendMessage(transcript);
+      }
+    };
+    recognition.onerror = () => {
+      setError('No se pudo escuchar el micrófono. Revisa los permisos del navegador.');
+      setListening(false);
+    };
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    setError(null);
+    recognition.start();
+    setListening(true);
   }
 
   return (
@@ -136,10 +240,26 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
       )}
 
       <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-hairline p-2">
+        {voiceSupported && (
+          <button
+            type="button"
+            onClick={toggleListening}
+            disabled={sending}
+            title={listening ? 'Detener dictado' : 'Hablar un comando'}
+            aria-label={listening ? 'Detener dictado' : 'Hablar un comando'}
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition-colors disabled:opacity-50 ${
+              listening
+                ? 'animate-pulse border-critical/50 bg-critical-soft text-critical'
+                : 'border-hairline-strong bg-raised text-ink-soft hover:bg-overlay hover:text-ink'
+            }`}
+          >
+            {listening ? <MicOff size={14} /> : <Mic size={14} />}
+          </button>
+        )}
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Escribe un comando…"
+          placeholder={listening ? 'Escuchando…' : 'Escribe un comando…'}
           disabled={sending}
           className="w-full min-w-0 rounded-lg border border-hairline-strong bg-sunken px-2.5 py-1.5 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-accent focus:ring-2 focus:ring-accent-soft disabled:opacity-60"
         />

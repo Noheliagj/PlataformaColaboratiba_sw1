@@ -1,7 +1,11 @@
+import { useRef } from 'react';
 import {
   ArrowLeft,
   Download,
+  FileDown,
+  FileUp,
   History,
+  ImagePlus,
   Loader2,
   Plus,
   Save,
@@ -11,6 +15,8 @@ import {
 import type { ProjectRole } from '../services/projects';
 import type { PresenceUser } from '../services/socket';
 import { Button } from './ui/Button';
+import { ThemeToggle } from './ui/ThemeToggle';
+import type { Theme } from '../lib/theme';
 
 export interface StatusMeta {
   dot: string;
@@ -26,12 +32,20 @@ interface EditorHeaderProps {
   presence: PresenceUser[];
   exporting: boolean;
   saving: boolean;
+  importingImage: boolean;
+  importingXmi: boolean;
+  exportingXmi: boolean;
+  theme: Theme;
+  onToggleTheme: () => void;
   onBack: () => void;
   onAddClass: () => void;
   onExportSpring: () => void;
   onSave: () => void;
   onOpenHistory: () => void;
   onToggleAssistant: () => void;
+  onImportImage: (file: File) => void;
+  onExportXmi: () => void;
+  onImportXmi: (file: File) => void;
 }
 
 /** Hash simple y determinístico: mismo usuario -> mismo color de avatar. */
@@ -96,13 +110,24 @@ export function EditorHeader({
   presence,
   exporting,
   saving,
+  importingImage,
+  importingXmi,
+  exportingXmi,
+  theme,
+  onToggleTheme,
   onBack,
   onAddClass,
   onExportSpring,
   onSave,
   onOpenHistory,
   onToggleAssistant,
+  onImportImage,
+  onExportXmi,
+  onImportXmi,
 }: EditorHeaderProps) {
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const xmiInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <header className="z-20 flex items-center justify-between gap-4 border-b border-hairline bg-surface/90 px-3 py-2 backdrop-blur-md">
       <div className="flex min-w-0 items-center gap-2.5">
@@ -146,6 +171,83 @@ export function EditorHeader({
 
       <div className="flex shrink-0 items-center gap-2">
         <PresenceAvatars users={presence} />
+
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+
+        <div className="flex items-center rounded-lg border border-hairline-strong bg-raised p-0.5">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onImportImage(file);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={importingImage}
+            title="Importar diagrama desde una imagen (IA / Vision)"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink disabled:opacity-55"
+          >
+            {importingImage ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <ImagePlus size={15} />
+            )}
+            <span className="hidden xl:inline">
+              {importingImage ? 'Analizando…' : 'Importar imagen'}
+            </span>
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-hairline-strong" />
+          <input
+            ref={xmiInputRef}
+            type="file"
+            accept=".xmi,.xml,text/xml,application/xml"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onImportXmi(file);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => xmiInputRef.current?.click()}
+            disabled={importingXmi}
+            title="Importar XMI 2.1 (Enterprise Architect u otra herramienta UML)"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink disabled:opacity-55"
+          >
+            {importingXmi ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <FileUp size={15} />
+            )}
+            <span className="hidden xl:inline">
+              {importingXmi ? 'Importando…' : 'Importar XMI'}
+            </span>
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-hairline-strong" />
+          <button
+            type="button"
+            onClick={onExportXmi}
+            disabled={exportingXmi}
+            title="Exportar el diagrama a XMI 2.1"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:bg-overlay hover:text-ink disabled:opacity-55"
+          >
+            {exportingXmi ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <FileDown size={15} />
+            )}
+            <span className="hidden xl:inline">
+              {exportingXmi ? 'Exportando…' : 'Exportar XMI'}
+            </span>
+          </button>
+        </div>
 
         <button
           type="button"

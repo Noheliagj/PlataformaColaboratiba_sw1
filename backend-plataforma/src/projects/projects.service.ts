@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, Project } from '@prisma/client';
+import { Prisma, Project, RelationshipType, Visibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectModelDto } from './dto/update-project-model.dto';
@@ -73,6 +73,59 @@ export interface DiagramForGenerator {
     name: string | null;
     sourceCardinality: string | null;
     targetCardinality: string | null;
+  }>;
+}
+
+/** Filas normalizadas para XMI (RF12/RF13): igual que DiagramForGenerator
+ * pero con métodos, visibilidad y el tipo de relación (asociación/herencia),
+ * que el generador Spring Boot no necesita pero el intercambio UML sí. */
+export interface DiagramForXmi {
+  projectName: string;
+  classes: Array<{
+    id: string;
+    name: string;
+    attributes: Array<{ name: string; type: string; visibility: Visibility }>;
+    methods: Array<{
+      name: string;
+      returnType: string;
+      parameters: string;
+      visibility: Visibility;
+    }>;
+  }>;
+  relationships: Array<{
+    id: string;
+    type: RelationshipType;
+    sourceClassId: string;
+    targetClassId: string;
+    name: string | null;
+    sourceCardinality: string | null;
+    targetCardinality: string | null;
+  }>;
+}
+
+/**
+ * Entrada de un diagrama completo "en bruto" (sin ids ni posiciones), usada
+ * para reemplazar el diagrama de un proyecto desde una fuente externa:
+ * RF11 (extracción por Vision de una imagen) y RF13 (importación XMI). Ver
+ * ProjectsService.importStructuredModel.
+ */
+export interface StructuredDiagramInput {
+  classes: Array<{
+    name: string;
+    attributes?: Array<{ name: string; type?: string }>;
+    methods?: Array<{
+      name: string;
+      returnType?: string;
+      parameters?: string;
+    }>;
+  }>;
+  relationships?: Array<{
+    sourceClassName: string;
+    targetClassName: string;
+    name?: string;
+    sourceCardinality?: string;
+    targetCardinality?: string;
+    type?: 'ASSOCIATION' | 'INHERITANCE';
   }>;
 }
 
@@ -394,6 +447,133 @@ export class ProjectsService {
         targetCardinality: rel.targetCardinality,
       })),
     };
+  }
+
+  /** RF12: filas normalizadas para exportar a XMI 2.1 (ver src/xmi). */
+  async getDiagramForXmi(userId: string, id: string): Promise<DiagramForXmi> {
+    const { project } = await this.getAccessibleOrThrow(userId, id);
+    const diagram = await this.prisma.diagram.findUnique({
+      where: { projectId: id },
+      include: DIAGRAM_INCLUDE,
+    });
+    if (!diagram)
+      return { projectName: project.name, classes: [], relationships: [] };
+
+    return {
+      projectName: project.name,
+      classes: diagram.classes.map((classRow) => ({
+        id: classRow.id,
+        name: classRow.name,
+        attributes: classRow.attributes.map((attr) => ({
+          name: attr.name,
+          type: attr.type,
+          visibility: attr.visibility,
+        })),
+        methods: classRow.methods.map((method) => ({
+          name: method.name,
+          returnType: method.returnType,
+          parameters: method.parameters,
+          visibility: method.visibility,
+        })),
+      })),
+      relationships: diagram.relationships.map((rel) => ({
+        id: rel.id,
+        type: rel.type,
+        sourceClassId: rel.sourceClassId,
+        targetClassId: rel.targetClassId,
+        name: rel.name,
+        sourceCardinality: rel.sourceCardinality,
+        targetCardinality: rel.targetCardinality,
+      })),
+    };
+  }
+
+  /**
+   * RF11 (import por imagen) / RF13 (import XMI): reemplaza el diagrama
+   * completo del proyecto a partir de una estructura ya resuelta (nombres,
+   * no ids) proveniente de una fuente externa. Mismo patrón transaccional
+   * que updateModel (borra y recrea), pero resolviendo relaciones por
+   * nombre de clase en vez de id, y con layout en grilla ya que la fuente
+   * externa no trae posiciones en el lienzo.
+   */
+  async importStructuredModel(
+    userId: string,
+    id: string,
+    input: StructuredDiagramInput,
+    activityAction: string,
+  ): Promise<{ modelData: DiagramModel }> {
+    const diagram = await this.getOwnDiagramOrThrow(userId, id);
+    const GRID_COLS = 4;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.relationship.deleteMany({ where: { diagramId: diagram.id } });
+      await tx.classNode.deleteMany({ where: { diagramId: diagram.id } });
+
+      const idByName = new Map<string, string>();
+      for (const [index, cls] of input.classes.entries()) {
+        const name = cls.name?.trim() || `Clase${index + 1}`;
+        const created = await tx.classNode.create({
+          data: {
+            diagramId: diagram.id,
+            name,
+            positionX: 80 + (index % GRID_COLS) * 260,
+            positionY: 80 + Math.floor(index / GRID_COLS) * 220,
+            attributes: {
+              create: (cls.attributes ?? [])
+                .filter((attr) => attr.name?.trim())
+                .map((attr, attrIndex) => ({
+                  name: attr.name.trim(),
+                  type: attr.type?.trim() || 'String',
+                  orderIndex: attrIndex,
+                })),
+            },
+            methods: {
+              create: (cls.methods ?? [])
+                .filter((method) => method.name?.trim())
+                .map((method, methodIndex) => ({
+                  name: method.name.trim(),
+                  returnType: method.returnType?.trim() || 'void',
+                  parameters: method.parameters?.trim() || '',
+                  orderIndex: methodIndex,
+                })),
+            },
+          },
+        });
+        idByName.set(name.toLowerCase(), created.id);
+      }
+
+      for (const rel of input.relationships ?? []) {
+        const sourceId = idByName.get(rel.sourceClassName.trim().toLowerCase());
+        const targetId = idByName.get(rel.targetClassName.trim().toLowerCase());
+        // Relación a una clase que no vino en la extracción/import: se
+        // descarta en vez de fallar todo el import por un dato parcial.
+        if (!sourceId || !targetId) continue;
+        await tx.relationship.create({
+          data: {
+            diagramId: diagram.id,
+            sourceClassId: sourceId,
+            targetClassId: targetId,
+            type:
+              rel.type === 'INHERITANCE'
+                ? RelationshipType.INHERITANCE
+                : RelationshipType.ASSOCIATION,
+            name: rel.name?.trim() || null,
+            sourceCardinality: rel.sourceCardinality?.trim() || null,
+            targetCardinality: rel.targetCardinality?.trim() || null,
+          },
+        });
+      }
+
+      await tx.project.update({
+        where: { id },
+        data: { updatedAt: new Date() },
+      });
+      await tx.projectActivity.create({
+        data: { projectId: id, userId, action: activityAction },
+      });
+    });
+
+    return { modelData: await this.getModelData(id) };
   }
 
   /**

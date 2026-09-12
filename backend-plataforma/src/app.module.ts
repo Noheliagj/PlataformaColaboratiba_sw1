@@ -9,6 +9,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { GeneratorModule } from './generator/generator.module';
 import { WebsocketsModule } from './websockets/websockets.module';
 import { IaModule } from './ia/ia.module';
+import { XmiModule } from './xmi/xmi.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { IaModule } from './ia/ia.module';
     GeneratorModule,
     WebsocketsModule,
     IaModule,
+    XmiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
