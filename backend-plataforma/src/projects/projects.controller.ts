@@ -58,6 +58,14 @@ export class ProjectsController {
     return this.projects.getHistory(user.id, id);
   }
 
+  // GET /projects/:id/messages -> historial reciente del chat del proyecto
+  // (se usa para pintar el panel de chat al abrir el editor; los mensajes en
+  // vivo llegan por WebSocket, ver DiagramGateway).
+  @Get(':id/messages')
+  getMessages(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.getChatHistory(user.id, id);
+  }
+
   // PUT /projects/:id/model -> guarda el diagrama (dueño o colaborador)
   @Put(':id/model')
   updateModel(

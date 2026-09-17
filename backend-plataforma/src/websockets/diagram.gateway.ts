@@ -24,6 +24,12 @@ interface DiagramChangePayload {
   edges: unknown[];
 }
 
+/** Chat en tiempo real: mensaje entrante del cliente (evento `send-message`). */
+interface SendMessagePayload {
+  projectId: string;
+  content: string;
+}
+
 /** RF10: quién está conectado ahora mismo a la sala de un proyecto. */
 interface PresenceUser {
   userId: string;
@@ -164,6 +170,44 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
       fromUserId: socket.data.userId,
       fromUserName: socket.data.userName,
     });
+  }
+
+  /**
+   * Chat en tiempo real: persiste el mensaje (para el historial de
+   * GET /projects/:id/messages) y lo retransmite a toda la sala, incluido
+   * quien lo envió (`server.to`, no `socket.to`) para que todos los
+   * clientes pinten el mensaje a partir del mismo evento, con el `id` y el
+   * `createdAt` que le asignó la base de datos.
+   */
+  @SubscribeMessage('send-message')
+  async onSendMessage(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: SendMessagePayload,
+  ): Promise<void> {
+    const userId = socket.data.userId as string | undefined;
+    const userName = socket.data.userName as string | undefined;
+    const projectId = socket.data.projectId as string | undefined;
+    const content = body?.content?.trim();
+    // Exige haberse unido primero a la room (join-project) con ESTE
+    // projectId: evita que un socket mande mensajes a un proyecto distinto
+    // del que ya validó, sin pagar otra consulta de acceso por mensaje.
+    if (!userId || !userName || !projectId || projectId !== body?.projectId) {
+      return;
+    }
+    if (!content) return;
+
+    try {
+      const message = await this.projects.createChatMessage(
+        userId,
+        projectId,
+        content,
+      );
+      this.server.to(this.room(projectId)).emit('chat-message', message);
+    } catch {
+      socket.emit('project-error', {
+        message: 'No se pudo enviar el mensaje',
+      });
+    }
   }
 
   /**

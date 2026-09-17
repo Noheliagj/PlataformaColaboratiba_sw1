@@ -58,6 +58,15 @@ export interface ProjectActivityEntry {
   user: { id: string; name: string };
 }
 
+/** Chat en tiempo real del proyecto: un mensaje (GET /projects/:id/messages y evento `chat-message`). */
+export interface ChatMessageEntry {
+  id: string;
+  content: string;
+  createdAt: Date;
+  projectId: string;
+  user: { id: string; name: string };
+}
+
 /** Filas normalizadas para el generador Spring Boot (RF7/RF14): sin pasar
  * por el formateo a string que usa el editor (ver getDiagramForGenerator). */
 export interface DiagramForGenerator {
@@ -405,6 +414,60 @@ export class ProjectsService {
       createdAt: activity.createdAt,
       user: activity.user,
     }));
+  }
+
+  /**
+   * Chat en tiempo real: historial reciente de mensajes del proyecto (dueño o
+   * colaborador pueden verlo), en orden cronológico ascendente para pintarlo
+   * directamente en el panel de chat.
+   */
+  async getChatHistory(
+    userId: string,
+    id: string,
+    limit = 50,
+  ): Promise<ChatMessageEntry[]> {
+    await this.getAccessibleOrThrow(userId, id);
+    const messages = await this.prisma.chatMessage.findMany({
+      where: { projectId: id },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: { user: { select: { id: true, name: true } } },
+    });
+    return messages.reverse().map((message) => ({
+      id: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+      projectId: message.projectId,
+      user: message.user,
+    }));
+  }
+
+  /**
+   * Chat en tiempo real: persiste un mensaje enviado desde el gateway
+   * (evento `send-message`, ver DiagramGateway) para que quede en el
+   * historial y se pueda recuperar al recargar el editor.
+   */
+  async createChatMessage(
+    userId: string,
+    id: string,
+    content: string,
+  ): Promise<ChatMessageEntry> {
+    await this.getAccessibleOrThrow(userId, id);
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new BadRequestException('El mensaje no puede estar vacío');
+    }
+    const message = await this.prisma.chatMessage.create({
+      data: { projectId: id, userId, content: trimmed },
+      include: { user: { select: { id: true, name: true } } },
+    });
+    return {
+      id: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+      projectId: message.projectId,
+      user: message.user,
+    };
   }
 
   /**

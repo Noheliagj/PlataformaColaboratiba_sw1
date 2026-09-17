@@ -104,6 +104,21 @@ export async function getProjectHistory(id: string): Promise<ProjectActivity[]> 
   return data;
 }
 
+/** Chat en tiempo real: un mensaje ya persistido del proyecto. */
+export interface ProjectChatMessage {
+  id: string;
+  content: string;
+  createdAt: string;
+  projectId: string;
+  user: { id: string; name: string };
+}
+
+/** GET /projects/:id/messages — historial reciente del chat, al abrir el editor. */
+export async function getProjectMessages(id: string): Promise<ProjectChatMessage[]> {
+  const { data } = await api.get<ProjectChatMessage[]>(`/projects/${id}/messages`);
+  return data;
+}
+
 /**
  * RF7: GET /projects/:id/generate/spring — descarga el backend Spring Boot
  * generado a partir del diagrama (nodes + edges) como un .zip binario.

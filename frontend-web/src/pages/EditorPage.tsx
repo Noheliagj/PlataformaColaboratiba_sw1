@@ -20,19 +20,23 @@ import { EditorHeader } from '../components/EditorHeader';
 import { EditorToolsPanel } from '../components/EditorToolsPanel';
 import { HistoryPanel } from '../components/HistoryPanel';
 import { ChatIA } from '../components/ChatIA';
+import { TeamChatPanel } from '../components/TeamChatPanel';
 import { useTheme } from '../lib/useTheme';
 import {
   downloadSpringBootProject,
   getProject,
+  getProjectMessages,
   saveProjectModel,
+  type ProjectChatMessage,
   type ProjectRole,
 } from '../services/projects';
 import { importDiagramFromImage } from '../services/ai';
 import { exportProjectXmi, importProjectXmi } from '../services/xmi';
-import { clearSession } from '../services/auth';
+import { clearSession, getStoredUser } from '../services/auth';
 import { getErrorMessage } from '../services/http-error';
 import {
   connectDiagramSocket,
+  type ChatMessagePayload,
   type DiagramUpdatePayload,
   type PresenceUpdatePayload,
   type PresenceUser,
@@ -95,6 +99,12 @@ export function EditorPage() {
   const loadedRef = useRef(false);
   const [remoteEditor, setRemoteEditor] = useState<string | null>(null);
   const [presence, setPresence] = useState<PresenceUser[]>([]);
+  const [socketConnected, setSocketConnected] = useState(false);
+
+  // Chat en tiempo real entre colaboradores conectados al proyecto.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ProjectChatMessage[]>([]);
+  const currentUserId = getStoredUser()?.id ?? null;
 
   // RF9: historial de guardados del diagrama.
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -163,6 +173,28 @@ export function EditorPage() {
     };
   }, [id, setNodes, setEdges, handleAuthError]);
 
+  // Historial reciente del chat del proyecto (los mensajes en vivo llegan
+  // por el evento 'chat-message' del socket, ver el efecto de más abajo).
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    getProjectMessages(id)
+      .then((history) => {
+        if (!cancelled) setChatMessages(history);
+      })
+      .catch(() => {
+        // El chat no es crítico para poder seguir editando el diagrama: si
+        // falla la carga del historial, se sigue pudiendo enviar y recibir
+        // mensajes nuevos por WebSocket.
+      });
+
+    return () => {
+      cancelled = true;
+      setChatMessages([]);
+    };
+  }, [id]);
+
   // RF10: conecta al canal /diagram del proyecto y aplica en vivo los
   // cambios que emitan otros colaboradores.
   useEffect(() => {
@@ -173,8 +205,11 @@ export function EditorPage() {
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      setSocketConnected(true);
       socket.emit('join-project', { projectId: id });
     });
+
+    socket.on('disconnect', () => setSocketConnected(false));
 
     socket.on('connect_error', () => {
       setError(
@@ -203,9 +238,17 @@ export function EditorPage() {
       setRemoteEditor(payload.fromUserName);
     });
 
+    // Chat en tiempo real: cada mensaje ya persistido (propio o de otro
+    // colaborador) llega por este único evento, con el id/hora que le
+    // asignó el backend.
+    socket.on('chat-message', (payload: ChatMessagePayload) => {
+      setChatMessages((prev) => [...prev, payload]);
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      setSocketConnected(false);
       setPresence([]);
     };
   }, [id, setNodes, setEdges]);
@@ -358,6 +401,17 @@ export function EditorPage() {
     [id, handleAuthError],
   );
 
+  // Chat en tiempo real: emite el mensaje por el socket; el mensaje solo se
+  // agrega a la lista cuando vuelve confirmado por el evento 'chat-message'
+  // (ver el listener de arriba), no de forma optimista.
+  const handleSendChatMessage = useCallback(
+    (content: string) => {
+      if (!id) return;
+      socketRef.current?.emit('send-message', { projectId: id, content });
+    },
+    [id],
+  );
+
   // RF12: descarga el diagrama actual como .xmi (XMI 2.1).
   const handleExportXmi = useCallback(async () => {
     if (!id) return;
@@ -459,6 +513,15 @@ export function EditorPage() {
         />
       )}
 
+      <TeamChatPanel
+        open={chatOpen}
+        messages={chatMessages}
+        currentUserId={currentUserId}
+        connected={socketConnected}
+        onSend={handleSendChatMessage}
+        onClose={() => setChatOpen(false)}
+      />
+
       {error && (
         <div className="animate-fade-rise absolute top-14 left-1/2 z-30 flex -translate-x-1/2 items-start gap-2 rounded-lg border border-critical/45 bg-critical-soft px-3 py-2.5 text-[13px] text-critical shadow-lg backdrop-blur-md">
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -484,9 +547,11 @@ export function EditorPage() {
           importingXmi={importingXmi}
           exportingXmi={exportingXmi}
           assistantOpen={assistantOpen}
+          chatOpen={chatOpen}
           onAddClass={addClass}
           onExportSpring={handleExportSpring}
           onToggleAssistant={() => setAssistantOpen((prev) => !prev)}
+          onToggleChat={() => setChatOpen((prev) => !prev)}
           onImportImage={handleImportImage}
           onExportXmi={handleExportXmi}
           onImportXmi={handleImportXmi}

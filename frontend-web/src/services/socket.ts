@@ -20,6 +20,15 @@ export interface PresenceUpdatePayload {
   users: PresenceUser[];
 }
 
+/** Chat en tiempo real: mensaje que llega/sale por el evento `chat-message`/`send-message`. */
+export interface ChatMessagePayload {
+  id: string;
+  content: string;
+  createdAt: string;
+  projectId: string;
+  user: { id: string; name: string };
+}
+
 /**
  * Abre la conexión al namespace `/diagram` del backend (equivalente al
  * tópico `/topic/diagram/{projectId}`, ver DiagramGateway) autenticada con

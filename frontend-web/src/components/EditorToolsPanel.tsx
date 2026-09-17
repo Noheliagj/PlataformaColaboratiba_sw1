@@ -7,6 +7,7 @@ import {
   FileUp,
   ImagePlus,
   Loader2,
+  MessageCircle,
   Moon,
   Plus,
   Sparkles,
@@ -24,9 +25,11 @@ interface EditorToolsPanelProps {
   importingXmi: boolean;
   exportingXmi: boolean;
   assistantOpen: boolean;
+  chatOpen: boolean;
   onAddClass: () => void;
   onExportSpring: () => void;
   onToggleAssistant: () => void;
+  onToggleChat: () => void;
   onImportImage: (file: File) => void;
   onExportXmi: () => void;
   onImportXmi: (file: File) => void;
@@ -100,9 +103,11 @@ export function EditorToolsPanel({
   importingXmi,
   exportingXmi,
   assistantOpen,
+  chatOpen,
   onAddClass,
   onExportSpring,
   onToggleAssistant,
+  onToggleChat,
   onImportImage,
   onExportXmi,
   onImportXmi,
@@ -193,6 +198,16 @@ export function EditorToolsPanel({
           expanded={expanded}
           disabled={exportingXmi}
           onClick={onExportXmi}
+        />
+      </Section>
+
+      <Section title="Colaboración" expanded={expanded}>
+        <ToolButton
+          icon={<MessageCircle size={16} />}
+          label="Chat del equipo"
+          expanded={expanded}
+          active={chatOpen}
+          onClick={onToggleChat}
         />
       </Section>
 
