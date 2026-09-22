@@ -61,11 +61,10 @@ export function HomePage() {
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
 
   // Tutorial guiado para usuarios nuevos: se abre solo una vez (ver
-  // lib/onboarding.ts) y se puede volver a ver desde el botón de ayuda del Navbar.
-  const [tourOpen, setTourOpen] = useState(false);
-  useEffect(() => {
-    if (!hasSeenOnboarding()) setTourOpen(true);
-  }, []);
+  // lib/onboarding.ts) y se puede volver a ver desde el botón de ayuda del
+  // Navbar. Se calcula como valor inicial del estado -- no en un efecto de
+  // montaje -- ya que solo depende de localStorage al momento de montar.
+  const [tourOpen, setTourOpen] = useState(() => !hasSeenOnboarding());
   function closeTour() {
     markOnboardingSeen();
     setTourOpen(false);
@@ -84,39 +83,53 @@ export function HomePage() {
     [navigate],
   );
 
-  const loadProjects = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setProjects(await listProjects());
-    } catch (err) {
-      if (!handleAuthError(err)) {
-        setError(getErrorMessage(err, 'No se pudieron cargar los proyectos'));
-      }
-    } finally {
-      setLoading(false);
-    }
+  // Carga inline en el efecto (en vez de una función con nombre en las
+  // deps): loading/error ya empiezan correctos por el estado inicial, y así
+  // el analizador ve el setState solo dentro de los callbacks async, no
+  // como algo que el efecto dispare síncronamente al entrar.
+  useEffect(() => {
+    let cancelled = false;
+    listProjects()
+      .then((data) => {
+        if (!cancelled) setProjects(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (!handleAuthError(err)) {
+          setError(getErrorMessage(err, 'No se pudieron cargar los proyectos'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [handleAuthError]);
 
-  useEffect(() => {
-    void loadProjects();
-  }, [loadProjects]);
-
   // RF4: si llegan por un enlace de invitación (?join=CODIGO), abre el
-  // formulario de unirse con el código ya rellenado.
-  useEffect(() => {
-    const code = searchParams.get('join');
-    if (!code) return;
-    setJoinCode(code.toUpperCase());
+  // formulario de unirse con el código ya rellenado. Abrir el modal se
+  // ajusta durante el render (comparando con el código ya procesado) para
+  // no disparar un setState síncrono en un efecto; solo limpiar el query
+  // param de la URL -- un sistema externo -- queda en el efecto.
+  const joinParam = searchParams.get('join');
+  const [handledJoinParam, setHandledJoinParam] = useState<string | null>(null);
+  if (joinParam && joinParam !== handledJoinParam) {
+    setHandledJoinParam(joinParam);
+    setJoinCode(joinParam.toUpperCase());
     setJoinPassword('');
     setJoinError(null);
     setJoinModalOpen(true);
+  }
+
+  useEffect(() => {
+    if (!joinParam) return;
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('join');
       return next;
     });
-  }, [searchParams, setSearchParams]);
+  }, [joinParam, setSearchParams]);
 
   if (!user) {
     return <Navigate to="/login" replace />;

@@ -31,12 +31,23 @@ export function HistoryPanel({ open, projectId, onClose }: HistoryPanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reinicia loading/error al abrir (o cambiar de proyecto) durante el
+  // render, no en el efecto: evita el setState síncrono justo al entrar al
+  // efecto y el render extra que provoca.
+  const openKey = open ? projectId : null;
+  const [lastOpenKey, setLastOpenKey] = useState(openKey);
+  if (openKey !== lastOpenKey) {
+    setLastOpenKey(openKey);
+    if (openKey) {
+      setLoading(true);
+      setError(null);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
 
-    setLoading(true);
-    setError(null);
     getProjectHistory(projectId)
       .then((data) => {
         if (!cancelled) setEntries(data);

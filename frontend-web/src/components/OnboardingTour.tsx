@@ -77,10 +77,15 @@ export function OnboardingTour({
 }: OnboardingTourProps) {
   const [stepIndex, setStepIndex] = useState(0);
 
-  // Siempre arranca en el paso 1 cada vez que se abre (incluido "Ver tutorial" de nuevo).
-  useEffect(() => {
+  // Siempre arranca en el paso 1 cada vez que se abre (incluido "Ver
+  // tutorial" de nuevo). Se ajusta durante el render -- no en un efecto --
+  // comparando con el `open` del render anterior, para no disparar un
+  // setState síncrono justo al entrar al efecto.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) setStepIndex(0);
-  }, [open]);
+  }
 
   useEffect(() => {
     if (!open) return;

@@ -72,11 +72,12 @@ export function ChatIA({ open, projectId, onClose }: ChatIAProps) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, sending]);
 
-  // Si se cierra el panel, corta cualquier reconocimiento en curso.
+  // Si se cierra el panel, corta cualquier reconocimiento en curso: `stop()`
+  // dispara `onend` (ver más abajo), que ya deja `listening` en false, así
+  // que no hace falta un setState síncrono aquí también.
   useEffect(() => {
     if (!open) {
       recognitionRef.current?.stop();
-      setListening(false);
     }
   }, [open]);
 
