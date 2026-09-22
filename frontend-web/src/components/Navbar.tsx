@@ -1,4 +1,4 @@
-import { LogOut } from 'lucide-react';
+import { HelpCircle, LogOut } from 'lucide-react';
 import { Brand } from './ui/Brand';
 import { Button } from './ui/Button';
 import { ThemeToggle } from './ui/ThemeToggle';
@@ -8,10 +8,11 @@ import type { AuthUser } from '../services/auth';
 interface NavbarProps {
   user: AuthUser;
   onLogout: () => void;
+  onReplayTour?: () => void;
 }
 
 /** Barra superior del dashboard: marca, identidad del usuario y salida. */
-export function Navbar({ user, onLogout }: NavbarProps) {
+export function Navbar({ user, onLogout, onReplayTour }: NavbarProps) {
   const [theme, toggleTheme] = useTheme();
   const initials = user.name
     .split(' ')
@@ -40,6 +41,17 @@ export function Navbar({ user, onLogout }: NavbarProps) {
               </span>
             </span>
           </div>
+
+          {onReplayTour && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onReplayTour}
+              icon={<HelpCircle size={16} />}
+              aria-label="Ver tutorial"
+              title="Ver tutorial"
+            />
+          )}
 
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
 

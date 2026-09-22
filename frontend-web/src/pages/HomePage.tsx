@@ -26,6 +26,8 @@ import { getErrorMessage } from '../services/http-error';
 import { Navbar } from '../components/Navbar';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { OnboardingTour } from '../components/OnboardingTour';
+import { hasSeenOnboarding, markOnboardingSeen } from '../lib/onboarding';
 
 const FIELD_CLASS =
   'w-full rounded-lg border border-hairline-strong bg-sunken px-3 py-2.5 text-sm text-ink ' +
@@ -57,6 +59,17 @@ export function HomePage() {
   // RF4: feedback al copiar el enlace + código de invitación de un proyecto.
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
+
+  // Tutorial guiado para usuarios nuevos: se abre solo una vez (ver
+  // lib/onboarding.ts) y se puede volver a ver desde el botón de ayuda del Navbar.
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    if (!hasSeenOnboarding()) setTourOpen(true);
+  }, []);
+  function closeTour() {
+    markOnboardingSeen();
+    setTourOpen(false);
+  }
 
   // Si el token caducó o es inválido, cerramos sesión y volvemos al login.
   const handleAuthError = useCallback(
@@ -223,7 +236,11 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <Navbar user={user} onLogout={handleLogout} />
+      <Navbar
+        user={user}
+        onLogout={handleLogout}
+        onReplayTour={() => setTourOpen(true)}
+      />
 
       {/* Cabecera de la vista */}
       <div className="bg-halo relative border-b border-hairline">
@@ -519,6 +536,12 @@ export function HomePage() {
           </div>
         </form>
       </Modal>
+
+      <OnboardingTour
+        open={tourOpen}
+        onClose={closeTour}
+        onFinish={closeTour}
+      />
     </div>
   );
 }

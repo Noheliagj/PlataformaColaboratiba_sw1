@@ -34,10 +34,13 @@ import { importDiagramFromImage } from '../services/ai';
 import { exportProjectXmi, importProjectXmi } from '../services/xmi';
 import { clearSession, getStoredUser } from '../services/auth';
 import { getErrorMessage } from '../services/http-error';
+import { ensurePushSubscription } from '../services/push';
+import { downloadDiagramAsPng } from '../lib/exportDiagramImage';
 import {
   connectDiagramSocket,
   type ChatMessagePayload,
   type DiagramUpdatePayload,
+  type NotificationPayload,
   type PresenceUpdatePayload,
   type PresenceUser,
 } from '../services/socket';
@@ -85,6 +88,7 @@ export function EditorPage() {
   const [importingImage, setImportingImage] = useState(false);
   const [importingXmi, setImportingXmi] = useState(false);
   const [exportingXmi, setExportingXmi] = useState(false);
+  const [exportingImage, setExportingImage] = useState(false);
 
   // Selector de tema claro/oscuro (oscuro por defecto, ver lib/theme.ts).
   const [theme, toggleTheme] = useTheme();
@@ -173,6 +177,12 @@ export function EditorPage() {
     };
   }, [id, setNodes, setEdges, handleAuthError]);
 
+  // Notificaciones push: solo tiene sentido pedirle permiso al dueño, que es
+  // quien las recibe (ver NotificationsService.notifyOwner en el backend).
+  useEffect(() => {
+    if (role === 'OWNER') void ensurePushSubscription();
+  }, [role]);
+
   // Historial reciente del chat del proyecto (los mensajes en vivo llegan
   // por el evento 'chat-message' del socket, ver el efecto de más abajo).
   useEffect(() => {
@@ -243,6 +253,14 @@ export function EditorPage() {
     // asignó el backend.
     socket.on('chat-message', (payload: ChatMessagePayload) => {
       setChatMessages((prev) => [...prev, payload]);
+    });
+
+    // Notificación para el dueño (colaborador se unió / guardó cambios),
+    // solo llega a este socket si está en su sala personal `user:{id}`
+    // (ver DiagramGateway.handleConnection). Reusa el toast de éxito que ya
+    // existe para 'notice'.
+    socket.on('notification', (payload: NotificationPayload) => {
+      setNotice(payload.message);
     });
 
     return () => {
@@ -370,6 +388,26 @@ export function EditorPage() {
       setExporting(false);
     }
   }, [id, projectName, handleAuthError]);
+
+  // Descarga el lienzo actual como imagen PNG (no pasa por el backend: se
+  // captura directamente del DOM del editor, ver lib/exportDiagramImage).
+  const handleExportImage = useCallback(async () => {
+    setExportingImage(true);
+    setError(null);
+    try {
+      await downloadDiagramAsPng(nodes, projectName || 'diagrama');
+    } catch (err) {
+      // No pasa por el backend (se captura del DOM), así que el mensaje útil
+      // ("agrega al menos una clase…") viene del propio Error, no de axios.
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo generar la imagen del diagrama',
+      );
+    } finally {
+      setExportingImage(false);
+    }
+  }, [nodes, projectName]);
 
   /**
    * Importación de diagramas por imagen (Vision): la IA interpreta la foto o
@@ -543,6 +581,7 @@ export function EditorPage() {
           theme={theme}
           onToggleTheme={toggleTheme}
           exporting={exporting}
+          exportingImage={exportingImage}
           importingImage={importingImage}
           importingXmi={importingXmi}
           exportingXmi={exportingXmi}
@@ -550,6 +589,7 @@ export function EditorPage() {
           chatOpen={chatOpen}
           onAddClass={addClass}
           onExportSpring={handleExportSpring}
+          onExportImage={handleExportImage}
           onToggleAssistant={() => setAssistantOpen((prev) => !prev)}
           onToggleChat={() => setChatOpen((prev) => !prev)}
           onImportImage={handleImportImage}

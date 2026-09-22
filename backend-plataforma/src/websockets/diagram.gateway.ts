@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
+  OnGatewayConnection,
   MessageBody,
   OnGatewayDisconnect,
   OnGatewayInit,
@@ -10,9 +11,11 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { Notification } from '@prisma/client';
 import { JwtPayload } from '../auth/jwt-payload.interface';
 import { UsersService } from '../users/users.service';
 import { DiagramModel, ProjectsService } from '../projects/projects.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface JoinProjectPayload {
   projectId: string;
@@ -60,7 +63,9 @@ interface PresenceUser {
     credentials: true,
   },
 })
-export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class DiagramGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server!: Server;
 
@@ -77,7 +82,18 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
     private readonly jwt: JwtService,
     private readonly users: UsersService,
     private readonly projects: ProjectsService,
-  ) {}
+    private readonly notifications: NotificationsService,
+  ) {
+    // NotificationsService no conoce Socket.IO (ver su comentario de
+    // cabecera); este gateway es quien retransmite en vivo, al dueño
+    // conectado ahora mismo, lo que NotificationsService.notifyOwner()
+    // guardó y emitió.
+    this.notifications.on('notification', (notification: Notification) => {
+      this.server
+        .to(this.userRoom(notification.userId))
+        .emit('notification', notification);
+    });
+  }
 
   /**
    * Autentica el handshake con el mismo JWT que usa la API REST (RF2), como
@@ -106,6 +122,17 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
         }
       })();
     });
+  }
+
+  /**
+   * Une el socket a su sala personal (`user:{userId}`) apenas se conecta,
+   * antes de que elija un proyecto: es donde le llegan las notificaciones
+   * push del dueño (RF10), que no son por-proyecto sino por-usuario.
+   */
+  handleConnection(socket: Socket): void {
+    const userId = socket.data.userId as string | undefined;
+    if (!userId) return;
+    void socket.join(this.userRoom(userId));
   }
 
   /** RF10: al desconectar, sale de la presencia del proyecto que tenía abierto. */
@@ -244,6 +271,10 @@ export class DiagramGateway implements OnGatewayInit, OnGatewayDisconnect {
 
   private room(projectId: string): string {
     return `diagram:${projectId}`;
+  }
+
+  private userRoom(userId: string): string {
+    return `user:${userId}`;
   }
 
   private extractToken(socket: Socket): string | null {

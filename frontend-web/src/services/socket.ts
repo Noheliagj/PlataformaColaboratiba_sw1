@@ -30,6 +30,19 @@ export interface ChatMessagePayload {
 }
 
 /**
+ * Notificación para el dueño de un proyecto (colaborador se unió / guardó
+ * cambios). Llega por el evento `notification`, a la sala personal
+ * `user:{userId}` -- ver DiagramGateway y NotificationsService.
+ */
+export interface NotificationPayload {
+  id: string;
+  type: 'MEMBER_JOINED' | 'DIAGRAM_SAVED';
+  message: string;
+  projectId: string;
+  createdAt: string;
+}
+
+/**
  * Abre la conexión al namespace `/diagram` del backend (equivalente al
  * tópico `/topic/diagram/{projectId}`, ver DiagramGateway) autenticada con
  * el mismo JWT que usa la API REST.

@@ -5,6 +5,7 @@ import {
   Download,
   FileDown,
   FileUp,
+  ImageDown,
   ImagePlus,
   Loader2,
   MessageCircle,
@@ -21,6 +22,7 @@ interface EditorToolsPanelProps {
   theme: Theme;
   onToggleTheme: () => void;
   exporting: boolean;
+  exportingImage: boolean;
   importingImage: boolean;
   importingXmi: boolean;
   exportingXmi: boolean;
@@ -28,6 +30,7 @@ interface EditorToolsPanelProps {
   chatOpen: boolean;
   onAddClass: () => void;
   onExportSpring: () => void;
+  onExportImage: () => void;
   onToggleAssistant: () => void;
   onToggleChat: () => void;
   onImportImage: (file: File) => void;
@@ -99,6 +102,7 @@ export function EditorToolsPanel({
   theme,
   onToggleTheme,
   exporting,
+  exportingImage,
   importingImage,
   importingXmi,
   exportingXmi,
@@ -106,6 +110,7 @@ export function EditorToolsPanel({
   chatOpen,
   onAddClass,
   onExportSpring,
+  onExportImage,
   onToggleAssistant,
   onToggleChat,
   onImportImage,
@@ -172,6 +177,15 @@ export function EditorToolsPanel({
           expanded={expanded}
           disabled={exporting}
           onClick={onExportSpring}
+        />
+        <ToolButton
+          icon={
+            exportingImage ? <Loader2 size={16} className="animate-spin" /> : <ImageDown size={16} />
+          }
+          label={exportingImage ? 'Generando imagen…' : 'Descargar como imagen'}
+          expanded={expanded}
+          disabled={exportingImage}
+          onClick={onExportImage}
         />
       </Section>
 

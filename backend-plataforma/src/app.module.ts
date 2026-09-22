@@ -10,6 +10,7 @@ import { GeneratorModule } from './generator/generator.module';
 import { WebsocketsModule } from './websockets/websockets.module';
 import { IaModule } from './ia/ia.module';
 import { XmiModule } from './xmi/xmi.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { XmiModule } from './xmi/xmi.module';
     WebsocketsModule,
     IaModule,
     XmiModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, Project, RelationshipType, Visibility } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectModelDto } from './dto/update-project-model.dto';
 import { JoinProjectDto } from './dto/join-project.dto';
@@ -177,7 +178,10 @@ const DIAGRAM_INCLUDE = {
  */
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(ownerId: string, dto: CreateProjectDto): Promise<Project> {
     // Reintenta si el código de invitación colisiona (muy improbable, 8
@@ -268,7 +272,7 @@ export class ProjectsService {
     id: string,
     dto: UpdateProjectModelDto,
   ): Promise<ProjectWithRole> {
-    await this.getAccessibleOrThrow(userId, id);
+    const { project } = await this.getAccessibleOrThrow(userId, id);
 
     await this.prisma.$transaction(async (tx) => {
       // Todo proyecto tiene su diagrama desde que se creó (ver create()).
@@ -342,6 +346,21 @@ export class ProjectsService {
       });
     });
 
+    // Notifica al dueño solo cuando el cambio lo hizo un colaborador — que
+    // el propio dueño se autonotifique al guardar no aporta nada.
+    if (userId !== project.ownerId) {
+      const collaborator = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      await this.notifications.notifyOwner({
+        ownerId: project.ownerId,
+        projectId: id,
+        type: 'DIAGRAM_SAVED',
+        message: `${collaborator?.name ?? 'Un colaborador'} guardó cambios en "${project.name}"`,
+      });
+    }
+
     return this.findOneAccessible(userId, id);
   }
 
@@ -386,10 +405,18 @@ export class ProjectsService {
       return { id: project.id, name: project.name, role: 'OWNER' };
     }
 
-    await this.prisma.projectMember.upsert({
+    const member = await this.prisma.projectMember.upsert({
       where: { projectId_userId: { projectId: project.id, userId } },
       create: { projectId: project.id, userId },
       update: {},
+      include: { user: { select: { name: true } } },
+    });
+
+    await this.notifications.notifyOwner({
+      ownerId: project.ownerId,
+      projectId: project.id,
+      type: 'MEMBER_JOINED',
+      message: `${member.user.name} se unió a "${project.name}"`,
     });
 
     return { id: project.id, name: project.name, role: 'COLLABORATOR' };

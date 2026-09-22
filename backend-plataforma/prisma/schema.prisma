@@ -28,6 +28,11 @@ model User {
   // Chat en tiempo real: mensajes enviados por este usuario.
   chatMessages ChatMessage[]
 
+  // Notificaciones push: avisos que este usuario recibió (RF10 dueño) y las
+  // suscripciones Web Push de sus navegadores/dispositivos.
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
+
   @@map("users")
 }
 
@@ -59,6 +64,10 @@ model Project {
 
   // Chat en tiempo real: mensajes del proyecto (dueño + colaboradores).
   chatMessages ChatMessage[]
+
+  // Notificaciones push disparadas por este proyecto (colaborador se unió,
+  // cambios guardados) hacia su dueño.
+  notifications Notification[]
 
   @@index([ownerId])
   @@map("projects")
@@ -114,6 +123,44 @@ model ChatMessage {
 
   @@index([projectId, createdAt])
   @@map("chat_messages")
+}
+
+// Notificación push para el dueño de un proyecto: un colaborador se unió o
+// guardó cambios en el diagrama. `type` queda como string (igual que
+// ProjectActivity.action) porque hoy solo hay dos eventos y no vale la pena
+// un enum que habría que tocar cada vez que se agregue uno nuevo.
+model Notification {
+  id        String   @id @default(uuid())
+  type      String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+  @@map("notifications")
+}
+
+// Suscripción Web Push de un navegador/dispositivo del usuario (RF10 dueño):
+// permite entregar la notificación aunque no tenga la app abierta. Un mismo
+// usuario puede tener varias (un navegador distinto por dispositivo).
+model PushSubscription {
+  id        String   @id @default(uuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // RF6: visibilidad UML de un atributo o método (-, +, #, ~).
